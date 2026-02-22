@@ -1,4 +1,11 @@
 require('dotenv').config();
+const express = require("express");
+
+const app = express();
+app.get("/", (req, res) => res.status(200).send("OK"));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Web keep-alive listening on ${PORT}`));
 const { Client, GatewayIntentBits, Partials, PermissionsBitField } = require('discord.js');
 const mongoose = require('mongoose');
 const riskEngine = require('./utils/riskEngine');
