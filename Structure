@@ -1,0 +1,13 @@
+showtime-guardian-bot/
+│
+├── index.js
+├── package.json
+├── .env.example
+├── /models
+│     ├── FlaggedUser.js
+│     ├── ScamPattern.js
+│     └── Appeal.js
+└── /utils
+      ├── riskEngine.js
+      ├── similarity.js
+      └── raidDetection.js
