@@ -90,4 +90,5 @@ client.on('messageCreate', async (message) => {
   }
 });
 
+console.log("Token length:", process.env.BOT_TOKEN?.length);
 client.login(process.env.BOT_TOKEN);
