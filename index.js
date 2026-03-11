@@ -173,7 +173,7 @@ client.on('interactionCreate', async (interaction) => {
         reason
       });
 
-      const reportChannel = interaction.guild.channels.cache.get(process.env.REPORT_CHANNEL_ID);
+      const reportChannel = interaction.guild.channels.cache.get(process.env.1375859362429534260);
 
       const embed = new EmbedBuilder()
         .setTitle('🚩 New User Report')
