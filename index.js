@@ -50,6 +50,44 @@ const client = new Client({
 });
 
 const joinTimestamps = [];
+const userMessageCounts = new Map();
+
+const NEW_MEMBER_ACCOUNT_AGE_MS = 14 * 24 * 60 * 60 * 1000; // 14 days
+const NEW_MEMBER_JOIN_AGE_MS = 7 * 24 * 60 * 60 * 1000;     // 7 days in server
+const HIGH_RISK_MESSAGE_WINDOW = 5;                         // first 5 messages
+
+const externalLinkRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/i;
+const discordInviteRegex = /(discord\.gg\/|discord\.com\/invite\/)/i;
+const telegramRegex = /(t\.me\/|telegram\.me\/|telegram\.org\/)/i;
+const whatsappRegex = /(wa\.me\/|chat\.whatsapp\.com\/)/i;
+const shortenerRegex = /(bit\.ly\/|tinyurl\.com\/|cutt\.ly\/|rb\.gy\/|linktr\.ee\/)/i;
+const walletRegex = /0x[a-fA-F0-9]{40}/;
+const massMentionRegex = /@everyone|@here/i;
+
+const hardBanPhrases = [
+  'guaranteed profit',
+  'dm me for signals',
+  'double your investment',
+  'earn money fast',
+  'join my server',
+  'free signals',
+  'vip access',
+  'investment opportunity',
+  'message me privately',
+  'crypto giveaway',
+  'forex mentor',
+  'binary options',
+  'pump group',
+  'trade alert service',
+  'copy my trades',
+  'managed account',
+  'account management',
+  '100% win rate',
+  'paid signals',
+  'premium signals',
+  'whatsapp me',
+  'telegram me'
+];
 
 client.once('ready', async () => {
   console.log(`Guardian Online: ${client.user.tag}`);
@@ -76,7 +114,7 @@ client.on('guildMemberAdd', async (member) => {
     try {
       await member.send('You were banned due to impersonation detection. If this is an error, reply here to appeal.');
     } catch {}
-    await member.ban({ reason: result.reason });
+    await member.ban({ reason: result.reason, deleteMessageSeconds: 60 });
     return;
   }
 
@@ -97,6 +135,41 @@ client.on('guildMemberAdd', async (member) => {
     if (role) await member.roles.add(role);
   }
 });
+
+function isHighRiskNewMember(member) {
+  const now = Date.now();
+  const accountAge = now - member.user.createdAt.getTime();
+  const joinedAt = member.joinedAt ? new Date(member.joinedAt).getTime() : now;
+  const serverAge = now - joinedAt;
+  const messageCount = userMessageCounts.get(member.id) || 0;
+
+  return (
+    accountAge < NEW_MEMBER_ACCOUNT_AGE_MS ||
+    serverAge < NEW_MEMBER_JOIN_AGE_MS ||
+    messageCount < HIGH_RISK_MESSAGE_WINDOW
+  );
+}
+
+function getInstantBanReason(content) {
+  if (discordInviteRegex.test(content)) return 'Discord invite advertising detected';
+  if (telegramRegex.test(content)) return 'Telegram spam detected';
+  if (whatsappRegex.test(content)) return 'WhatsApp spam detected';
+  if (shortenerRegex.test(content)) return 'Suspicious shortened link detected';
+  if (walletRegex.test(content)) return 'Wallet spam detected';
+  if (massMentionRegex.test(content)) return 'Mass mention spam detected';
+
+  for (const phrase of hardBanPhrases) {
+    if (content.includes(phrase)) {
+      return `Scam/advertising phrase detected: ${phrase}`;
+    }
+  }
+
+  if (externalLinkRegex.test(content)) {
+    return 'External link posting by new/high-risk member detected';
+  }
+
+  return null;
+}
 
 client.on('messageCreate', async (message) => {
   if (!message.guild) {
@@ -125,11 +198,51 @@ client.on('messageCreate', async (message) => {
 
   if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
+  const currentCount = userMessageCounts.get(member.id) || 0;
+  userMessageCounts.set(member.id, currentCount + 1);
+
+  const content = (message.content || '').toLowerCase().trim();
+  const highRiskNewMember = isHighRiskNewMember(member);
+  const instantBanReason = getInstantBanReason(content);
+
   try {
+    if (highRiskNewMember && instantBanReason) {
+      try {
+        await message.delete();
+      } catch (err) {
+        console.error('Failed to delete instant-ban message:', err.message);
+      }
+
+      try {
+        await member.send(
+          `You were banned automatically: ${instantBanReason}. If this is an error, reply here to appeal.`
+        );
+      } catch {}
+
+      await member.ban({
+        reason: instantBanReason,
+        deleteMessageSeconds: 300
+      });
+
+      console.log(`Instant banned ${member.user.tag}: ${instantBanReason}`);
+      return;
+    }
+
     const result = await riskEngine.evaluateMessage(message);
 
+    if (result.deleteMessage) {
+      try {
+        await message.delete();
+      } catch (err) {
+        console.error('Failed to delete message:', err.message);
+      }
+    }
+
     if (result.ban) {
-      await member.ban({ reason: result.reason });
+      await member.ban({
+        reason: result.reason,
+        deleteMessageSeconds: 300
+      });
     } else if (result.kick) {
       await member.kick(result.reason);
     } else if (result.timeout) {
@@ -173,7 +286,7 @@ client.on('interactionCreate', async (interaction) => {
         reason
       });
 
-      const reportChannel = interaction.guild.channels.cache.get(process.env.1375859362429534260);
+      const reportChannel = interaction.guild.channels.cache.get(process.env.REPORT_CHANNEL_ID);
 
       const embed = new EmbedBuilder()
         .setTitle('🚩 New User Report')
