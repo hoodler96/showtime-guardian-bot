@@ -16,6 +16,7 @@ const registerCommands = require('./utils/registerCommands');
 
 const Appeal = require('./models/Appeal');
 const Report = require('./models/Report');
+const Strike = require('./models/Strike');
 
 const app = express();
 app.get('/', (_req, res) => res.status(200).send('OK'));
@@ -27,12 +28,13 @@ app.listen(PORT, '0.0.0.0', () => {
 
 /* ----------------------------- ENV / CONFIG ----------------------------- */
 
-const BOT_TOKEN = (process.env.BOT_TOKEN || '').trim();
-const MONGO_URI = (process.env.MONGO_URI || '').trim();
-const CLIENT_ID = (process.env.CLIENT_ID || '').trim();
-const GUILD_ID = (process.env.GUILD_ID || '').trim();
-const REPORT_CHANNEL_ID = (process.env.REPORT_CHANNEL_ID || '').trim();
-const MOD_LOG_CHANNEL_ID = (process.env.MOD_LOG_CHANNEL_ID || '').trim();
+const BOT_TOKEN = String(process.env.BOT_TOKEN || '').trim();
+const MONGO_URI = String(process.env.MONGO_URI || '').trim();
+const CLIENT_ID = String(process.env.CLIENT_ID || '').trim();
+const GUILD_ID = String(process.env.GUILD_ID || '').trim();
+const REPORT_CHANNEL_ID = String(process.env.REPORT_CHANNEL_ID || '').trim();
+const MOD_LOG_CHANNEL_ID = String(process.env.MOD_LOG_CHANNEL_ID || '').trim();
+
 const PREMIUM_EXEMPT_ROLE_IDS = process.env.PREMIUM_EXEMPT_ROLE_IDS || '';
 const STAFF_ROLE_IDS = process.env.STAFF_ROLE_IDS || '';
 const PROTECTED_NAME_PATTERNS =
@@ -41,6 +43,7 @@ const PROTECTED_NAME_PATTERNS =
 const MIN_ACCOUNT_AGE_DAYS = process.env.MIN_ACCOUNT_AGE_DAYS || '7';
 const AUTO_BAN_EXTERNAL_LINKS = process.env.AUTO_BAN_EXTERNAL_LINKS || 'true';
 const AUTO_BAN_DISCORD_INVITES = process.env.AUTO_BAN_DISCORD_INVITES || 'true';
+const LINK_WHITELIST = process.env.LINK_WHITELIST || '';
 
 const PREMIUM_EXEMPT_ROLES = PREMIUM_EXEMPT_ROLE_IDS
   .split(',')
@@ -57,23 +60,20 @@ const PROTECTED_PATTERNS = PROTECTED_NAME_PATTERNS
   .map(x => x.trim().toLowerCase())
   .filter(Boolean);
 
+const WHITELIST = LINK_WHITELIST
+  .split(',')
+  .map(x => x.trim().toLowerCase())
+  .filter(Boolean);
+
 const MIN_ACCOUNT_AGE_MS = Number(MIN_ACCOUNT_AGE_DAYS) * 24 * 60 * 60 * 1000;
 
 /* ----------------------------- STARTUP / DB ----------------------------- */
 
-console.log('Token length:', BOT_TOKEN?.length || 0);
+console.log('Token length:', BOT_TOKEN.length);
 console.log('CLIENT_ID loaded:', CLIENT_ID ? `yes (${CLIENT_ID.length} chars)` : 'no');
 console.log('GUILD_ID loaded:', GUILD_ID ? `yes (${GUILD_ID.length} chars)` : 'no');
 console.log('REPORT_CHANNEL_ID loaded:', REPORT_CHANNEL_ID ? 'yes' : 'no');
 console.log('MOD_LOG_CHANNEL_ID loaded:', MOD_LOG_CHANNEL_ID ? 'yes' : 'no');
-
-if (!BOT_TOKEN) {
-  console.error('Missing BOT_TOKEN');
-}
-
-if (!MONGO_URI) {
-  console.error('Missing MONGO_URI');
-}
 
 mongoose.connect(MONGO_URI)
   .then(() => {
@@ -117,7 +117,7 @@ function truncate(text, max = 1000) {
 }
 
 function normalizeText(text) {
-  return (text || '')
+  return String(text || '')
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
@@ -136,6 +136,7 @@ function isStaff(member) {
   if (!member) return false;
   if (member.permissions?.has(PermissionsBitField.Flags.ManageGuild)) return true;
   if (member.permissions?.has(PermissionsBitField.Flags.BanMembers)) return true;
+  if (member.permissions?.has(PermissionsBitField.Flags.ModerateMembers)) return true;
   return memberHasAnyRole(member, STAFF_ROLES);
 }
 
@@ -183,6 +184,11 @@ function containsScamKeywords(text = '') {
   return patterns.some(rx => rx.test(text));
 }
 
+function isWhitelisted(content = '') {
+  const clean = content.toLowerCase();
+  return WHITELIST.some(domain => clean.includes(domain));
+}
+
 async function getTextChannel(channelId) {
   if (!channelId) return null;
 
@@ -215,13 +221,8 @@ async function sendModLog({
       .setTimestamp()
       .setFooter({ text: footer });
 
-    if (description) {
-      embed.setDescription(truncate(description, 4096));
-    }
-
-    if (fields.length) {
-      embed.addFields(fields);
-    }
+    if (description) embed.setDescription(truncate(description, 4096));
+    if (fields.length) embed.addFields(fields);
 
     await channel.send({ embeds: [embed] });
   } catch (err) {
@@ -277,6 +278,50 @@ async function sendReportEmbed({ guild, reportDoc }) {
   }
 }
 
+async function addStrike(userId, guildId) {
+  let record = await Strike.findOne({ userId, guildId });
+
+  if (!record) {
+    record = await Strike.create({
+      userId,
+      guildId,
+      count: 1,
+      lastStrikeAt: new Date()
+    });
+    return 1;
+  }
+
+  record.count += 1;
+  record.lastStrikeAt = new Date();
+  await record.save();
+
+  return record.count;
+}
+
+async function applyModerationAction(member, action, reason) {
+  if (!member) return 'skipped';
+
+  try {
+    if (action === 'ban' && member.bannable) {
+      await member.ban({
+        deleteMessageSeconds: 60 * 60,
+        reason
+      });
+      return 'banned';
+    }
+
+    if (action === 'timeout' && member.moderatable) {
+      await member.timeout(10 * 60 * 1000, reason);
+      return 'timed_out';
+    }
+
+    return 'skipped';
+  } catch (err) {
+    console.error('applyModerationAction error:', err.message);
+    return 'error';
+  }
+}
+
 function shouldIgnoreAutomod(message) {
   if (!message?.guild || !message?.member) return true;
   if (message.author?.bot) return true;
@@ -291,6 +336,7 @@ function evaluateMessageRisk(message) {
   const hasInvite = containsDiscordInvite(content);
   const hasExternal = containsExternalLink(content);
   const hasScamTerms = containsScamKeywords(content);
+  const whitelisted = isWhitelisted(content);
   const young = isYoungAccount(message.author);
 
   let action = null;
@@ -299,14 +345,14 @@ function evaluateMessageRisk(message) {
   if (AUTO_BAN_DISCORD_INVITES === 'true' && hasInvite) {
     action = 'ban';
     reason = 'Posted a Discord invite link';
-  } else if (AUTO_BAN_EXTERNAL_LINKS === 'true' && hasExternal) {
-    action = 'ban';
-    reason = 'Posted an external link';
+  } else if (AUTO_BAN_EXTERNAL_LINKS === 'true' && hasExternal && !whitelisted) {
+    action = 'timeout';
+    reason = 'Posted an unapproved external link';
   } else if (young && hasScamTerms) {
-    action = 'ban';
+    action = 'timeout';
     reason = 'Young account posted likely scam/advertising content';
   } else if (hasScamTerms) {
-    action = 'delete';
+    action = 'timeout';
     reason = 'Scam/advertising language detected';
   }
 
@@ -317,6 +363,7 @@ function evaluateMessageRisk(message) {
       hasInvite,
       hasExternal,
       hasScamTerms,
+      whitelisted,
       young
     }
   };
@@ -333,62 +380,53 @@ async function handleAutomodViolation(message, risk) {
       await message.delete().catch(() => null);
     }
 
-    if (risk.action === 'ban' && member?.bannable) {
-      await member.ban({
-        deleteMessageSeconds: 60 * 60,
-        reason: `AutoMod: ${risk.reason}`
-      });
+    let finalAction = risk.action;
+    let strikeCount = null;
 
-      await sendModLog({
-        guild,
-        title: '🔨 Auto-Ban Triggered',
-        color: 0xff0000,
-        fields: [
-          {
-            name: 'User',
-            value: `${member.user.tag} (${member.id})`,
-            inline: false
-          },
-          {
-            name: 'Channel',
-            value: `${message.channel}`,
-            inline: true
-          },
-          {
-            name: 'Reason',
-            value: risk.reason,
-            inline: true
-          },
-          {
-            name: 'Message',
-            value: truncate(message.content || '[no content]'),
-            inline: false
-          }
-        ]
-      });
+    if (finalAction !== 'ban') {
+      strikeCount = await addStrike(member.id, guild.id);
 
-      console.log(`[AutoMod][BAN] ${member.user.tag} | ${risk.reason}`);
-      return;
+      if (strikeCount >= 3) {
+        finalAction = 'ban';
+      } else {
+        finalAction = 'timeout';
+      }
     }
+
+    const result = await applyModerationAction(
+      member,
+      finalAction,
+      strikeCount
+        ? `Strike ${strikeCount}: ${risk.reason}`
+        : `AutoMod: ${risk.reason}`
+    );
 
     await sendModLog({
       guild,
-      title: '🧹 Auto-Delete Triggered',
-      color: 0xff9900,
+      title: finalAction === 'ban' ? '🔨 Auto Enforcement: Ban' : '⏱️ Auto Enforcement: Timeout',
+      color: finalAction === 'ban' ? 0xff0000 : 0xff9900,
       fields: [
         {
           name: 'User',
-          value: `${message.author.tag} (${message.author.id})`,
+          value: `${member.user.tag} (${member.id})`,
           inline: false
         },
         {
-          name: 'Channel',
-          value: `${message.channel}`,
+          name: 'Action',
+          value: `${finalAction} (${result})`,
           inline: true
         },
         {
           name: 'Reason',
           value: risk.reason,
+          inline: true
+        },
+        ...(strikeCount
+          ? [{ name: 'Strike Count', value: String(strikeCount), inline: true }]
+          : []),
+        {
+          name: 'Channel',
+          value: `${message.channel}`,
           inline: true
         },
         {
@@ -399,7 +437,9 @@ async function handleAutomodViolation(message, risk) {
       ]
     });
 
-    console.log(`[AutoMod][DELETE] ${message.author.tag} | ${risk.reason}`);
+    console.log(
+      `[AutoMod][${finalAction.toUpperCase()}] ${member.user.tag} | ${risk.reason} | strike=${strikeCount ?? 'n/a'}`
+    );
   } catch (err) {
     console.error('handleAutomodViolation error:', err.message);
   }
@@ -426,9 +466,14 @@ async function runMessageModeration(message) {
       console.error('riskEngine.analyzeMessage error:', err.message);
     }
 
-    if (externalRisk?.action && !riskResult.action) {
-      riskResult.action = externalRisk.action;
-      riskResult.reason = externalRisk.reason || 'Flagged by risk engine';
+    if (externalRisk?.action) {
+      if (!riskResult.action) {
+        riskResult.action = externalRisk.action;
+        riskResult.reason = externalRisk.reason || 'Flagged by AI risk engine';
+      } else if (riskResult.action === 'timeout' && externalRisk.action === 'ban') {
+        riskResult.action = 'ban';
+        riskResult.reason = externalRisk.reason || 'Escalated by AI risk engine';
+      }
     }
 
     if (riskResult.action) {
@@ -588,25 +633,18 @@ async function performJoinVetting(member) {
 client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag} at ${nowIso()}`);
 
-  const runtimeClientId = (process.env.CLIENT_ID || '').trim();
-  const runtimeGuildId = (process.env.GUILD_ID || '').trim();
-
   console.log(
     'Command registration IDs:',
     JSON.stringify({
-      clientIdPresent: !!runtimeClientId,
-      guildIdPresent: !!runtimeGuildId,
-      clientIdLength: runtimeClientId.length,
-      guildIdLength: runtimeGuildId.length
+      clientIdPresent: !!CLIENT_ID,
+      guildIdPresent: !!GUILD_ID,
+      clientIdLength: CLIENT_ID.length,
+      guildIdLength: GUILD_ID.length
     })
   );
 
   try {
-    if (!runtimeClientId || !runtimeGuildId) {
-      throw new Error('CLIENT_ID or GUILD_ID missing at runtime');
-    }
-
-await registerCommands(runtimeClientId, runtimeGuildId, BOT_TOKEN);
+    await registerCommands(CLIENT_ID, GUILD_ID, BOT_TOKEN);
     console.log('Slash commands registered');
   } catch (err) {
     console.error('registerCommands failed:', err.message);
@@ -724,6 +762,41 @@ client.on('interactionCreate', async (interaction) => {
 
       await interaction.reply({
         content: 'Your appeal has been submitted for review.',
+        flags: 64
+      });
+
+      return;
+    }
+
+    if (interaction.commandName === 'reports') {
+      if (!interaction.member || !isStaff(interaction.member)) {
+        await interaction.reply({
+          content: 'You do not have permission to use this command.',
+          flags: 64
+        });
+        return;
+      }
+
+      const reports = await Report.find({ guildId: interaction.guildId })
+        .sort({ createdAt: -1 })
+        .limit(10);
+
+      if (!reports.length) {
+        await interaction.reply({
+          content: 'No reports found.',
+          flags: 64
+        });
+        return;
+      }
+
+      const content = reports
+        .map((r, i) => {
+          return `${i + 1}. ${r.targetTag} — ${truncate(r.reason, 120)} [${r.status || 'open'}]`;
+        })
+        .join('\n');
+
+      await interaction.reply({
+        content: `📋 Recent Reports\n\n${content}`,
         flags: 64
       });
 
