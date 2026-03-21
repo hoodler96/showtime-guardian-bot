@@ -27,20 +27,20 @@ app.listen(PORT, '0.0.0.0', () => {
 
 /* ----------------------------- ENV / CONFIG ----------------------------- */
 
-const {
-  BOT_TOKEN,
-  MONGO_URI,
-  CLIENT_ID,
-  GUILD_ID,
-  REPORT_CHANNEL_ID,
-  MOD_LOG_CHANNEL_ID,
-  PREMIUM_EXEMPT_ROLE_IDS = '',
-  STAFF_ROLE_IDS = '',
-  PROTECTED_NAME_PATTERNS = 'showtime247,showtime trades,showtime,admin,moderator,mod,support',
-  MIN_ACCOUNT_AGE_DAYS = '7',
-  AUTO_BAN_EXTERNAL_LINKS = 'true',
-  AUTO_BAN_DISCORD_INVITES = 'true'
-} = process.env;
+const BOT_TOKEN = (process.env.BOT_TOKEN || '').trim();
+const MONGO_URI = (process.env.MONGO_URI || '').trim();
+const CLIENT_ID = (process.env.CLIENT_ID || '').trim();
+const GUILD_ID = (process.env.GUILD_ID || '').trim();
+const REPORT_CHANNEL_ID = (process.env.REPORT_CHANNEL_ID || '').trim();
+const MOD_LOG_CHANNEL_ID = (process.env.MOD_LOG_CHANNEL_ID || '').trim();
+const PREMIUM_EXEMPT_ROLE_IDS = process.env.PREMIUM_EXEMPT_ROLE_IDS || '';
+const STAFF_ROLE_IDS = process.env.STAFF_ROLE_IDS || '';
+const PROTECTED_NAME_PATTERNS =
+  process.env.PROTECTED_NAME_PATTERNS ||
+  'showtime247,showtime trades,showtime,admin,moderator,mod,support';
+const MIN_ACCOUNT_AGE_DAYS = process.env.MIN_ACCOUNT_AGE_DAYS || '7';
+const AUTO_BAN_EXTERNAL_LINKS = process.env.AUTO_BAN_EXTERNAL_LINKS || 'true';
+const AUTO_BAN_DISCORD_INVITES = process.env.AUTO_BAN_DISCORD_INVITES || 'true';
 
 const PREMIUM_EXEMPT_ROLES = PREMIUM_EXEMPT_ROLE_IDS
   .split(',')
@@ -62,6 +62,18 @@ const MIN_ACCOUNT_AGE_MS = Number(MIN_ACCOUNT_AGE_DAYS) * 24 * 60 * 60 * 1000;
 /* ----------------------------- STARTUP / DB ----------------------------- */
 
 console.log('Token length:', BOT_TOKEN?.length || 0);
+console.log('CLIENT_ID loaded:', CLIENT_ID ? `yes (${CLIENT_ID.length} chars)` : 'no');
+console.log('GUILD_ID loaded:', GUILD_ID ? `yes (${GUILD_ID.length} chars)` : 'no');
+console.log('REPORT_CHANNEL_ID loaded:', REPORT_CHANNEL_ID ? 'yes' : 'no');
+console.log('MOD_LOG_CHANNEL_ID loaded:', MOD_LOG_CHANNEL_ID ? 'yes' : 'no');
+
+if (!BOT_TOKEN) {
+  console.error('Missing BOT_TOKEN');
+}
+
+if (!MONGO_URI) {
+  console.error('Missing MONGO_URI');
+}
 
 mongoose.connect(MONGO_URI)
   .then(() => {
@@ -576,8 +588,25 @@ async function performJoinVetting(member) {
 client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag} at ${nowIso()}`);
 
+  const runtimeClientId = (process.env.CLIENT_ID || '').trim();
+  const runtimeGuildId = (process.env.GUILD_ID || '').trim();
+
+  console.log(
+    'Command registration IDs:',
+    JSON.stringify({
+      clientIdPresent: !!runtimeClientId,
+      guildIdPresent: !!runtimeGuildId,
+      clientIdLength: runtimeClientId.length,
+      guildIdLength: runtimeGuildId.length
+    })
+  );
+
   try {
-    await registerCommands(client, CLIENT_ID, GUILD_ID);
+    if (!runtimeClientId || !runtimeGuildId) {
+      throw new Error('CLIENT_ID or GUILD_ID missing at runtime');
+    }
+
+    await registerCommands(client, runtimeClientId, runtimeGuildId);
     console.log('Slash commands registered');
   } catch (err) {
     console.error('registerCommands failed:', err.message);
