@@ -7,8 +7,7 @@ const {
   GatewayIntentBits,
   Partials,
   PermissionsBitField,
-  EmbedBuilder,
-  AuditLogEvent
+  EmbedBuilder
 } = require('discord.js');
 
 const riskEngine = require('./utils/riskEngine');
@@ -60,7 +59,7 @@ const PROTECTED_PATTERNS = PROTECTED_NAME_PATTERNS
 
 const MIN_ACCOUNT_AGE_MS = Number(MIN_ACCOUNT_AGE_DAYS) * 24 * 60 * 60 * 1000;
 
-/* ----------------------------- EXPRESS / DB ----------------------------- */
+/* ----------------------------- STARTUP / DB ----------------------------- */
 
 console.log('Token length:', BOT_TOKEN?.length || 0);
 
@@ -174,6 +173,7 @@ function containsScamKeywords(text = '') {
 
 async function getTextChannel(channelId) {
   if (!channelId) return null;
+
   try {
     const channel = await client.channels.fetch(channelId);
     if (!channel || !channel.isTextBased()) return null;
@@ -203,8 +203,13 @@ async function sendModLog({
       .setTimestamp()
       .setFooter({ text: footer });
 
-    if (description) embed.setDescription(truncate(description, 4096));
-    if (fields.length) embed.addFields(fields);
+    if (description) {
+      embed.setDescription(truncate(description, 4096));
+    }
+
+    if (fields.length) {
+      embed.addFields(fields);
+    }
 
     await channel.send({ embeds: [embed] });
   } catch (err) {
@@ -223,15 +228,35 @@ async function sendReportEmbed({ guild, reportDoc }) {
       .setTitle('🚨 New User Report')
       .setColor(0xffa500)
       .addFields(
-        { name: 'Reporter', value: `<@${reportDoc.reporterId}>`, inline: true },
-        { name: 'Reported User', value: `<@${reportDoc.reportedUserId}>`, inline: true },
-        { name: 'Reported Username', value: truncate(reportDoc.reportedUsername || 'Unknown', 256), inline: false },
-        { name: 'Reason', value: truncate(reportDoc.reason || 'No reason provided', 1024), inline: false }
+        {
+          name: 'Reporter',
+          value: `<@${reportDoc.reporterId}> (${reportDoc.reporterTag})`,
+          inline: false
+        },
+        {
+          name: 'Reported User',
+          value: `<@${reportDoc.targetId}> (${reportDoc.targetTag})`,
+          inline: false
+        },
+        {
+          name: 'Reason',
+          value: truncate(reportDoc.reason || 'No reason provided', 1024),
+          inline: false
+        },
+        {
+          name: 'Status',
+          value: reportDoc.status || 'open',
+          inline: true
+        }
       )
       .setTimestamp();
 
     if (reportDoc.messageLink) {
-      embed.addFields({ name: 'Message Link', value: reportDoc.messageLink, inline: false });
+      embed.addFields({
+        name: 'Message Link',
+        value: reportDoc.messageLink,
+        inline: false
+      });
     }
 
     await channel.send({ embeds: [embed] });
@@ -307,10 +332,26 @@ async function handleAutomodViolation(message, risk) {
         title: '🔨 Auto-Ban Triggered',
         color: 0xff0000,
         fields: [
-          { name: 'User', value: `${member.user.tag} (${member.id})`, inline: false },
-          { name: 'Channel', value: `${message.channel}`, inline: true },
-          { name: 'Reason', value: risk.reason, inline: true },
-          { name: 'Message', value: truncate(message.content || '[no content]'), inline: false }
+          {
+            name: 'User',
+            value: `${member.user.tag} (${member.id})`,
+            inline: false
+          },
+          {
+            name: 'Channel',
+            value: `${message.channel}`,
+            inline: true
+          },
+          {
+            name: 'Reason',
+            value: risk.reason,
+            inline: true
+          },
+          {
+            name: 'Message',
+            value: truncate(message.content || '[no content]'),
+            inline: false
+          }
         ]
       });
 
@@ -323,10 +364,26 @@ async function handleAutomodViolation(message, risk) {
       title: '🧹 Auto-Delete Triggered',
       color: 0xff9900,
       fields: [
-        { name: 'User', value: `${message.author.tag} (${message.author.id})`, inline: false },
-        { name: 'Channel', value: `${message.channel}`, inline: true },
-        { name: 'Reason', value: risk.reason, inline: true },
-        { name: 'Message', value: truncate(message.content || '[no content]'), inline: false }
+        {
+          name: 'User',
+          value: `${message.author.tag} (${message.author.id})`,
+          inline: false
+        },
+        {
+          name: 'Channel',
+          value: `${message.channel}`,
+          inline: true
+        },
+        {
+          name: 'Reason',
+          value: risk.reason,
+          inline: true
+        },
+        {
+          name: 'Message',
+          value: truncate(message.content || '[no content]'),
+          inline: false
+        }
       ]
     });
 
@@ -343,7 +400,6 @@ async function runMessageModeration(message) {
 
     const riskResult = evaluateMessageRisk(message);
 
-    // Optional external risk engine hook
     let externalRisk = null;
     try {
       if (typeof riskEngine?.analyzeMessage === 'function') {
@@ -378,16 +434,19 @@ async function checkMemberImpersonation(member) {
     if (isStaff(member) || isPremiumExempt(member)) return;
 
     const username = normalizeText(member.user.username);
-    const displayName = normalizeText(member.displayName || member.user.globalName || member.user.username);
+    const displayName = normalizeText(
+      member.displayName || member.user.globalName || member.user.username
+    );
 
-    const suspicious = isProtectedName(username) || isProtectedName(displayName);
+    const suspicious =
+      isProtectedName(username) ||
+      isProtectedName(displayName);
 
     if (!suspicious) return;
 
     const young = isYoungAccount(member.user);
     const reason = 'Possible staff/brand impersonation';
 
-    // Young impersonating accounts get auto-ban
     if (young && member.bannable) {
       await member.ban({
         deleteMessageSeconds: 60 * 60,
@@ -399,10 +458,26 @@ async function checkMemberImpersonation(member) {
         title: '🚫 Impersonation Auto-Ban',
         color: 0xff0000,
         fields: [
-          { name: 'User', value: `${member.user.tag} (${member.id})`, inline: false },
-          { name: 'Display Name', value: truncate(member.displayName || 'N/A', 256), inline: true },
-          { name: 'Username', value: truncate(member.user.username || 'N/A', 256), inline: true },
-          { name: 'Reason', value: reason, inline: false }
+          {
+            name: 'User',
+            value: `${member.user.tag} (${member.id})`,
+            inline: false
+          },
+          {
+            name: 'Display Name',
+            value: truncate(member.displayName || 'N/A', 256),
+            inline: true
+          },
+          {
+            name: 'Username',
+            value: truncate(member.user.username || 'N/A', 256),
+            inline: true
+          },
+          {
+            name: 'Reason',
+            value: reason,
+            inline: false
+          }
         ]
       });
 
@@ -414,10 +489,26 @@ async function checkMemberImpersonation(member) {
       title: '⚠️ Impersonation Flag',
       color: 0xffcc00,
       fields: [
-        { name: 'User', value: `${member.user.tag} (${member.id})`, inline: false },
-        { name: 'Display Name', value: truncate(member.displayName || 'N/A', 256), inline: true },
-        { name: 'Username', value: truncate(member.user.username || 'N/A', 256), inline: true },
-        { name: 'Reason', value: reason, inline: false }
+        {
+          name: 'User',
+          value: `${member.user.tag} (${member.id})`,
+          inline: false
+        },
+        {
+          name: 'Display Name',
+          value: truncate(member.displayName || 'N/A', 256),
+          inline: true
+        },
+        {
+          name: 'Username',
+          value: truncate(member.user.username || 'N/A', 256),
+          inline: true
+        },
+        {
+          name: 'Reason',
+          value: reason,
+          inline: false
+        }
       ]
     });
   } catch (err) {
@@ -436,7 +527,6 @@ async function performJoinVetting(member) {
       isProtectedName(member.displayName) ||
       isProtectedName(member.user.username);
 
-    // Optional raid detection hook
     try {
       if (typeof raidDetection?.trackJoin === 'function') {
         await raidDetection.trackJoin(member.guild.id, member.user.id);
@@ -450,10 +540,26 @@ async function performJoinVetting(member) {
       title: '👤 Member Joined',
       color: 0x3498db,
       fields: [
-        { name: 'User', value: `${member.user.tag} (${member.id})`, inline: false },
-        { name: 'Account Created', value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`, inline: false },
-        { name: 'Young Account', value: young ? 'Yes' : 'No', inline: true },
-        { name: 'Protected Name Match', value: suspiciousName ? 'Yes' : 'No', inline: true }
+        {
+          name: 'User',
+          value: `${member.user.tag} (${member.id})`,
+          inline: false
+        },
+        {
+          name: 'Account Created',
+          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`,
+          inline: false
+        },
+        {
+          name: 'Young Account',
+          value: young ? 'Yes' : 'No',
+          inline: true
+        },
+        {
+          name: 'Protected Name Match',
+          value: suspiciousName ? 'Yes' : 'No',
+          inline: true
+        }
       ]
     });
 
@@ -467,7 +573,7 @@ async function performJoinVetting(member) {
 
 /* ----------------------------- EVENTS ----------------------------- */
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`Logged in as ${client.user.tag} at ${nowIso()}`);
 
   try {
@@ -495,6 +601,7 @@ client.on('messageUpdate', async (_oldMessage, newMessage) => {
     if (newMessage.partial) {
       await newMessage.fetch().catch(() => null);
     }
+
     await runMessageModeration(newMessage);
   } catch (err) {
     console.error('messageUpdate moderation error:', err.message);
@@ -515,11 +622,11 @@ client.on('interactionCreate', async (interaction) => {
       const reportDoc = await Report.create({
         guildId: interaction.guildId,
         reporterId: interaction.user.id,
-        reportedUserId: reportedUser.id,
-        reportedUsername: reportedUser.tag,
+        reporterTag: interaction.user.tag,
+        targetId: reportedUser.id,
+        targetTag: reportedUser.tag,
         reason,
-        messageLink,
-        createdAt: new Date()
+        messageLink
       });
 
       await sendReportEmbed({
@@ -532,15 +639,27 @@ client.on('interactionCreate', async (interaction) => {
         title: '📨 Report Submitted',
         color: 0x9b59b6,
         fields: [
-          { name: 'Reporter', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
-          { name: 'Reported User', value: `${reportedUser.tag} (${reportedUser.id})`, inline: false },
-          { name: 'Reason', value: truncate(reason, 1024), inline: false }
+          {
+            name: 'Reporter',
+            value: `${interaction.user.tag} (${interaction.user.id})`,
+            inline: false
+          },
+          {
+            name: 'Reported User',
+            value: `${reportedUser.tag} (${reportedUser.id})`,
+            inline: false
+          },
+          {
+            name: 'Reason',
+            value: truncate(reason, 1024),
+            inline: false
+          }
         ]
       });
 
       await interaction.reply({
         content: 'Your report has been submitted to the moderation team.',
-        ephemeral: true
+        flags: 64
       });
 
       return;
@@ -561,14 +680,22 @@ client.on('interactionCreate', async (interaction) => {
         title: '📝 Ban Appeal Submitted',
         color: 0x2ecc71,
         fields: [
-          { name: 'User', value: `${interaction.user.tag} (${interaction.user.id})`, inline: false },
-          { name: 'Appeal', value: truncate(appealText, 1024), inline: false }
+          {
+            name: 'User',
+            value: `${interaction.user.tag} (${interaction.user.id})`,
+            inline: false
+          },
+          {
+            name: 'Appeal',
+            value: truncate(appealText, 1024),
+            inline: false
+          }
         ]
       });
 
       await interaction.reply({
         content: 'Your appeal has been submitted for review.',
-        ephemeral: true
+        flags: 64
       });
 
       return;
@@ -579,7 +706,7 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: 'Something went wrong while processing that command.',
-        ephemeral: true
+        flags: 64
       }).catch(() => null);
     }
   }
@@ -593,7 +720,11 @@ client.on('guildBanAdd', async (ban) => {
     title: '🔨 Member Banned',
     color: 0xe74c3c,
     fields: [
-      { name: 'User', value: `${ban.user.tag} (${ban.user.id})`, inline: false }
+      {
+        name: 'User',
+        value: `${ban.user.tag} (${ban.user.id})`,
+        inline: false
+      }
     ]
   });
 });
@@ -604,7 +735,11 @@ client.on('guildMemberRemove', async (member) => {
     title: '📤 Member Left',
     color: 0x95a5a6,
     fields: [
-      { name: 'User', value: `${member.user.tag} (${member.id})`, inline: false }
+      {
+        name: 'User',
+        value: `${member.user.tag} (${member.id})`,
+        inline: false
+      }
     ]
   });
 });
