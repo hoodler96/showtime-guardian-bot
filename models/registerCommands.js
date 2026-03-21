@@ -1,6 +1,8 @@
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
-module.exports = async function registerCommands(_client, clientId, guildId) {
+console.log('*** REGISTERCOMMANDS JS LOADED ***');
+
+module.exports = async function registerCommands(clientId, guildId) {
   const cleanClientId = String(clientId || '').trim();
   const cleanGuildId = String(guildId || '').trim();
   const token = String(process.env.BOT_TOKEN || '').trim();
