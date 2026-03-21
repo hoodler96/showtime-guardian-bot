@@ -1,9 +1,15 @@
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
 module.exports = async function registerCommands(_client, clientId, guildId) {
-  const cleanClientId = (clientId || '').trim();
-  const cleanGuildId = (guildId || '').trim();
-  const token = (process.env.BOT_TOKEN || '').trim();
+  const cleanClientId = String(clientId || '').trim();
+  const cleanGuildId = String(guildId || '').trim();
+  const token = String(process.env.BOT_TOKEN || '').trim();
+
+  console.log('registerCommands received:', {
+    cleanClientId,
+    cleanGuildId,
+    tokenPresent: !!token
+  });
 
   if (!cleanClientId) {
     throw new Error('CLIENT_ID missing inside registerCommands');
@@ -49,7 +55,7 @@ module.exports = async function registerCommands(_client, clientId, guildId) {
           .setDescription('Why should the moderation action be reviewed?')
           .setRequired(true)
       )
-  ].map(cmd => cmd.toJSON());
+  ].map(command => command.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(token);
 
