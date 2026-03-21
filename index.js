@@ -606,7 +606,7 @@ client.once('clientReady', async () => {
       throw new Error('CLIENT_ID or GUILD_ID missing at runtime');
     }
 
-    await registerCommands(client, runtimeClientId, runtimeGuildId);
+await registerCommands(runtimeClientId, runtimeGuildId);
     console.log('Slash commands registered');
   } catch (err) {
     console.error('registerCommands failed:', err.message);
