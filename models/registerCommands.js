@@ -1,16 +1,15 @@
 const { REST, Routes, SlashCommandBuilder } = require('discord.js');
 
-console.log('*** REGISTERCOMMANDS JS LOADED ***');
-
-module.exports = async function registerCommands(clientId, guildId) {
+module.exports = async function registerCommands(clientId, guildId, botToken) {
   const cleanClientId = String(clientId || '').trim();
   const cleanGuildId = String(guildId || '').trim();
-  const token = String(process.env.BOT_TOKEN || '').trim();
+  const cleanToken = String(botToken || '').trim();
 
   console.log('registerCommands received:', {
     cleanClientId,
     cleanGuildId,
-    tokenPresent: !!token
+    tokenPresent: !!cleanToken,
+    tokenLength: cleanToken.length
   });
 
   if (!cleanClientId) {
@@ -21,7 +20,7 @@ module.exports = async function registerCommands(clientId, guildId) {
     throw new Error('GUILD_ID missing inside registerCommands');
   }
 
-  if (!token) {
+  if (!cleanToken) {
     throw new Error('BOT_TOKEN missing inside registerCommands');
   }
 
@@ -59,7 +58,7 @@ module.exports = async function registerCommands(clientId, guildId) {
       )
   ].map(command => command.toJSON());
 
-  const rest = new REST({ version: '10' }).setToken(token);
+  const rest = new REST({ version: '10' }).setToken(cleanToken);
 
   await rest.put(
     Routes.applicationGuildCommands(cleanClientId, cleanGuildId),
