@@ -1,78 +1,62 @@
-const crypto = require('crypto');
-const { normalize, similarity } = require('./similarity');
-const ScamPattern = require('../models/ScamPattern');
+let openai = null;
 
-const protectedNames = ["showtime247", "showtime"];
+try {
+  const OpenAI = require('openai');
 
-exports.evaluateMember = async function(member) {
+  if (process.env.OPENAI_API_KEY) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    });
+  }
+} catch (err) {
+  console.log('OpenAI package not installed yet. AI risk engine disabled.');
+}
 
-  let score = 0;
-  let autoBan = false;
-  let kick = false;
-  let timeout = false;
-  let quarantine = false;
-  let reason = "Risk threshold met";
+async function analyzeMessage({ content }) {
+  try {
+    if (!openai || !content) return null;
 
-  const age = Date.now() - member.user.createdAt;
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a Discord anti-scam moderation classifier. Reply with exactly one word: SAFE, SUSPICIOUS, or SCAM.'
+        },
+        {
+          role: 'user',
+          content
+        }
+      ]
+    });
 
-  if (age < 3 * 86400000) score += 70;
-  else if (age < 14 * 86400000) score += 30;
+    const result = String(response.choices?.[0]?.message?.content || '')
+      .trim()
+      .toUpperCase();
 
-  if (!member.user.avatar) score += 15;
-
-  const normalized = normalize(member.user.username);
-
-  for (let name of protectedNames) {
-    const sim = similarity(normalized, name);
-
-    if (sim > 0.93) {
-      autoBan = true;
-      reason = "Impersonation detected";
-      return { autoBan, reason };
+    if (result === 'SCAM') {
+      return {
+        action: 'ban',
+        reason: 'AI detected scam content'
+      };
     }
 
-    if (sim > 0.85) score += 80;
-  }
-
-  const patterns = await ScamPattern.find({});
-  for (let p of patterns) {
-    if (normalized.includes(p.value)) score += p.severity;
-  }
-
-  if (score >= 100) kick = true;
-  else if (score >= 80) timeout = true;
-  else if (score >= 50) quarantine = true;
-
-  return { autoBan, kick, timeout, quarantine, reason };
-};
-
-exports.evaluateMessage = async function(message) {
-
-  const content = message.content.toLowerCase();
-  const walletRegex = /0x[a-fA-F0-9]{40}/;
-  const telegramRegex = /(t\.me|telegram\.me)/;
-  const scamPhrases = ["guaranteed profit", "dm me", "double your investment"];
-
-  if (walletRegex.test(content)) {
-    return { timeout: true, reason: "Wallet spam detected" };
-  }
-
-  if (telegramRegex.test(content)) {
-    return { timeout: true, reason: "Telegram scam link detected" };
-  }
-
-  for (let phrase of scamPhrases) {
-    if (content.includes(phrase)) {
-      return { timeout: true, reason: "Scam phrase detected" };
+    if (result === 'SUSPICIOUS') {
+      return {
+        action: 'timeout',
+        reason: 'AI flagged suspicious content'
+      };
     }
+
+    return null;
+  } catch (err) {
+    console.error('AI risk error:', err.message);
+    return null;
   }
+}
 
-  const hash = crypto.createHash('sha256').update(content).digest('hex');
-  await ScamPattern.updateOne(
-    { type: "messageHash", value: hash },
-    { $setOnInsert: { severity: 50 } },
-    { upsert: true }
-  );
-
-  return {};
+module.exports = {
+  analyzeMessage
 };
