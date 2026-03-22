@@ -341,16 +341,23 @@ function evaluateMessageRisk(message) {
 
   let action = null;
   let reason = null;
+  let skipStrikes = false;
 
   if (AUTO_BAN_DISCORD_INVITES === 'true' && hasInvite) {
     action = 'ban';
     reason = 'Posted a Discord invite link';
+    skipStrikes = true;
+  } else if (young && hasExternal && !whitelisted) {
+    action = 'ban';
+    reason = 'Young account posted an unapproved external link';
+    skipStrikes = true;
+  } else if (young && hasScamTerms) {
+    action = 'ban';
+    reason = 'Young account posted likely scam/advertising content';
+    skipStrikes = true;
   } else if (AUTO_BAN_EXTERNAL_LINKS === 'true' && hasExternal && !whitelisted) {
     action = 'timeout';
     reason = 'Posted an unapproved external link';
-  } else if (young && hasScamTerms) {
-    action = 'timeout';
-    reason = 'Young account posted likely scam/advertising content';
   } else if (hasScamTerms) {
     action = 'timeout';
     reason = 'Scam/advertising language detected';
@@ -359,6 +366,7 @@ function evaluateMessageRisk(message) {
   return {
     action,
     reason,
+    skipStrikes,
     meta: {
       hasInvite,
       hasExternal,
