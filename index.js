@@ -389,17 +389,17 @@ async function handleAutomodViolation(message, risk) {
     }
 
     let finalAction = risk.action;
-    let strikeCount = null;
+let strikeCount = null;
 
-    if (finalAction !== 'ban') {
-      strikeCount = await addStrike(member.id, guild.id);
+if (finalAction !== 'ban') {
+  strikeCount = await addStrike(member.id, guild.id);
 
-      if (strikeCount >= 3) {
-        finalAction = 'ban';
-      } else {
-        finalAction = 'timeout';
-      }
-    }
+  if (strikeCount >= 3) {
+    finalAction = 'ban';
+  } else {
+    finalAction = 'timeout';
+  }
+}
 
     const result = await applyModerationAction(
       member,
