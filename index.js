@@ -388,10 +388,10 @@ async function handleAutomodViolation(message, risk) {
       await message.delete().catch(() => null);
     }
 
-    let finalAction = risk.action;
+   let finalAction = risk.action;
 let strikeCount = null;
 
-if (finalAction !== 'ban') {
+if (finalAction !== 'ban' && !risk.skipStrikes) {
   strikeCount = await addStrike(member.id, guild.id);
 
   if (strikeCount >= 3) {
