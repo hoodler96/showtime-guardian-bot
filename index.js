@@ -391,13 +391,19 @@ function evaluateMessageRisk(message) {
   let reason = null;
   let skipStrikes = false;
 
-  // Links and Discord invites are no longer auto-ban/timeout triggers.
-  // They are handled as mod-review alerts in runMessageModeration().
+  // Discord invites = immediate ban
+  if (hasInvite) {
+    action = 'ban';
+    reason = 'Posted a Discord invite link';
+    skipStrikes = true;
 
-  if (young && hasScamTerms) {
+  // Scam phrasing from young accounts = immediate ban
+  } else if (young && hasScamTerms) {
     action = 'ban';
     reason = 'Young account posted likely scam/advertising phrasing';
     skipStrikes = true;
+
+  // Scam phrasing from normal users = timeout/strike
   } else if (hasScamTerms) {
     action = 'timeout';
     reason = 'Spam/scam advertising phrasing detected';
