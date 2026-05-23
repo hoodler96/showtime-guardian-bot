@@ -37,12 +37,12 @@ const MOD_LOG_CHANNEL_ID = String(process.env.MOD_LOG_CHANNEL_ID || '').trim();
 
 const PREMIUM_EXEMPT_ROLE_IDS = process.env.PREMIUM_EXEMPT_ROLE_IDS || '';
 const STAFF_ROLE_IDS = process.env.STAFF_ROLE_IDS || '';
+
 const PROTECTED_NAME_PATTERNS =
   process.env.PROTECTED_NAME_PATTERNS ||
   'showtime247,showtime trades,showtime,admin,moderator,mod,support';
+
 const MIN_ACCOUNT_AGE_DAYS = process.env.MIN_ACCOUNT_AGE_DAYS || '7';
-const AUTO_BAN_EXTERNAL_LINKS = process.env.AUTO_BAN_EXTERNAL_LINKS || 'true';
-const AUTO_BAN_DISCORD_INVITES = process.env.AUTO_BAN_DISCORD_INVITES || 'true';
 const LINK_WHITELIST = process.env.LINK_WHITELIST || '';
 
 const PREMIUM_EXEMPT_ROLES = PREMIUM_EXEMPT_ROLE_IDS
@@ -76,12 +76,8 @@ console.log('REPORT_CHANNEL_ID loaded:', REPORT_CHANNEL_ID ? 'yes' : 'no');
 console.log('MOD_LOG_CHANNEL_ID loaded:', MOD_LOG_CHANNEL_ID ? 'yes' : 'no');
 
 mongoose.connect(MONGO_URI)
-  .then(() => {
-    console.log('MongoDB Connected');
-  })
-  .catch((err) => {
-    console.error('MongoDB connection failed:', err.message);
-  });
+  .then(() => console.log('MongoDB Connected'))
+  .catch((err) => console.error('MongoDB connection failed:', err.message));
 
 mongoose.connection.on('error', (err) => {
   console.error('MongoDB runtime error:', err.message);
@@ -178,7 +174,12 @@ function containsScamKeywords(text = '') {
     /limited spots/i,
     /free vip/i,
     /claim your winnings/i,
-    /airdrop/i
+    /airdrop/i,
+    /copy my trades/i,
+    /message me to earn/i,
+    /recover your funds/i,
+    /pump group/i,
+    /signal group/i
   ];
 
   return patterns.some(rx => rx.test(text));
@@ -330,6 +331,53 @@ function shouldIgnoreAutomod(message) {
   return false;
 }
 
+/* ----------------------------- LINK ALERTS ONLY ----------------------------- */
+
+async function sendLinkReviewAlert(message, linkType) {
+  try {
+    await sendModLog({
+      guild: message.guild,
+      title: linkType === 'invite'
+        ? '⚠️ Discord Invite Posted — Review Needed'
+        : '⚠️ External Link Posted — Review Needed',
+      color: 0xffcc00,
+      fields: [
+        {
+          name: 'User',
+          value: `${message.author.tag} (${message.author.id})`,
+          inline: false
+        },
+        {
+          name: 'Channel',
+          value: `${message.channel}`,
+          inline: true
+        },
+        {
+          name: 'Account Age',
+          value: isYoungAccount(message.author) ? 'Young account' : 'Established account',
+          inline: true
+        },
+        {
+          name: 'Action Taken',
+          value: 'No ban. No timeout. Moderator review only.',
+          inline: false
+        },
+        {
+          name: 'Message',
+          value: truncate(message.content || '[no content]', 1024),
+          inline: false
+        }
+      ]
+    });
+
+    console.log(`[LinkReview] ${message.author.tag} posted ${linkType} link. Alert only.`);
+  } catch (err) {
+    console.error('sendLinkReviewAlert error:', err.message);
+  }
+}
+
+/* ----------------------------- MESSAGE RISK ----------------------------- */
+
 function evaluateMessageRisk(message) {
   const content = message.content || '';
 
@@ -343,24 +391,16 @@ function evaluateMessageRisk(message) {
   let reason = null;
   let skipStrikes = false;
 
-  if (AUTO_BAN_DISCORD_INVITES === 'true' && hasInvite) {
+  // Links and Discord invites are no longer auto-ban/timeout triggers.
+  // They are handled as mod-review alerts in runMessageModeration().
+
+  if (young && hasScamTerms) {
     action = 'ban';
-    reason = 'Posted a Discord invite link';
+    reason = 'Young account posted likely scam/advertising phrasing';
     skipStrikes = true;
-  } else if (young && hasExternal && !whitelisted) {
-    action = 'ban';
-    reason = 'Young account posted an unapproved external link';
-    skipStrikes = true;
-  } else if (young && hasScamTerms) {
-    action = 'ban';
-    reason = 'Young account posted likely scam/advertising content';
-    skipStrikes = true;
-  } else if (AUTO_BAN_EXTERNAL_LINKS === 'true' && hasExternal && !whitelisted) {
-    action = 'timeout';
-    reason = 'Posted an unapproved external link';
   } else if (hasScamTerms) {
     action = 'timeout';
-    reason = 'Scam/advertising language detected';
+    reason = 'Spam/scam advertising phrasing detected';
   }
 
   return {
@@ -388,18 +428,18 @@ async function handleAutomodViolation(message, risk) {
       await message.delete().catch(() => null);
     }
 
-   let finalAction = risk.action;
-let strikeCount = null;
+    let finalAction = risk.action;
+    let strikeCount = null;
 
-if (finalAction !== 'ban' && !risk.skipStrikes) {
-  strikeCount = await addStrike(member.id, guild.id);
+    if (finalAction !== 'ban' && !risk.skipStrikes) {
+      strikeCount = await addStrike(member.id, guild.id);
 
-  if (strikeCount >= 3) {
-    finalAction = 'ban';
-  } else {
-    finalAction = 'timeout';
-  }
-}
+      if (strikeCount >= 3) {
+        finalAction = 'ban';
+      } else {
+        finalAction = 'timeout';
+      }
+    }
 
     const result = await applyModerationAction(
       member,
@@ -411,7 +451,9 @@ if (finalAction !== 'ban' && !risk.skipStrikes) {
 
     await sendModLog({
       guild,
-      title: finalAction === 'ban' ? '🔨 Auto Enforcement: Ban' : '⏱️ Auto Enforcement: Timeout',
+      title: finalAction === 'ban'
+        ? '🔨 Auto Enforcement: Ban'
+        : '⏱️ Auto Enforcement: Timeout',
       color: finalAction === 'ban' ? 0xff0000 : 0xff9900,
       fields: [
         {
@@ -460,7 +502,18 @@ async function runMessageModeration(message) {
 
     const riskResult = evaluateMessageRisk(message);
 
+    const hasInvite = riskResult.meta.hasInvite;
+    const hasExternal = riskResult.meta.hasExternal;
+    const whitelisted = riskResult.meta.whitelisted;
+
+    if (hasInvite) {
+      await sendLinkReviewAlert(message, 'invite');
+    } else if (hasExternal && !whitelisted) {
+      await sendLinkReviewAlert(message, 'external');
+    }
+
     let externalRisk = null;
+
     try {
       if (typeof riskEngine?.analyzeMessage === 'function') {
         externalRisk = await riskEngine.analyzeMessage({
@@ -474,7 +527,9 @@ async function runMessageModeration(message) {
       console.error('riskEngine.analyzeMessage error:', err.message);
     }
 
-    if (externalRisk?.action) {
+    // External risk engine can still enforce if it finds real spam/scam phrasing.
+    // But do not let it escalate links alone into bans/timeouts.
+    if (externalRisk?.action && riskResult.meta.hasScamTerms) {
       if (!riskResult.action) {
         riskResult.action = externalRisk.action;
         riskResult.reason = externalRisk.reason || 'Flagged by AI risk engine';
@@ -491,6 +546,8 @@ async function runMessageModeration(message) {
     console.error('runMessageModeration error:', err.message);
   }
 }
+
+/* ----------------------------- JOIN / NAME REVIEW ----------------------------- */
 
 async function checkMemberImpersonation(member) {
   if (!member?.guild || !member?.user) return;
@@ -509,49 +566,11 @@ async function checkMemberImpersonation(member) {
 
     if (!suspicious) return;
 
-    const young = isYoungAccount(member.user);
-    const reason = 'Possible staff/brand impersonation';
-
-    if (young && member.bannable) {
-      await member.ban({
-        deleteMessageSeconds: 60 * 60,
-        reason: `AutoMod: ${reason}`
-      });
-
-      await sendModLog({
-        guild: member.guild,
-        title: '🚫 Impersonation Auto-Ban',
-        color: 0xff0000,
-        fields: [
-          {
-            name: 'User',
-            value: `${member.user.tag} (${member.id})`,
-            inline: false
-          },
-          {
-            name: 'Display Name',
-            value: truncate(member.displayName || 'N/A', 256),
-            inline: true
-          },
-          {
-            name: 'Username',
-            value: truncate(member.user.username || 'N/A', 256),
-            inline: true
-          },
-          {
-            name: 'Reason',
-            value: reason,
-            inline: false
-          }
-        ]
-      });
-
-      return;
-    }
+    const reason = 'Possible staff/brand name match';
 
     await sendModLog({
       guild: member.guild,
-      title: '⚠️ Impersonation Flag',
+      title: '⚠️ Name Review Flag',
       color: 0xffcc00,
       fields: [
         {
@@ -568,6 +587,11 @@ async function checkMemberImpersonation(member) {
           name: 'Username',
           value: truncate(member.user.username || 'N/A', 256),
           inline: true
+        },
+        {
+          name: 'Action Taken',
+          value: 'No ban. Moderator review only.',
+          inline: false
         },
         {
           name: 'Reason',
@@ -624,6 +648,11 @@ async function performJoinVetting(member) {
           name: 'Protected Name Match',
           value: suspiciousName ? 'Yes' : 'No',
           inline: true
+        },
+        {
+          name: 'Action Taken',
+          value: 'Join logged. No automatic name ban.',
+          inline: false
         }
       ]
     });
