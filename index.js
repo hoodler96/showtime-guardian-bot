@@ -487,27 +487,64 @@ function evaluateMessageRisk(message) {
   const hasInvite = containsDiscordInvite(content);
   const hasExternal = containsExternalLink(content);
   const hasScamTerms = containsScamKeywords(content);
+  const hasMassPing = containsMassMention(content);
+  const hasShortenedLink = containsShortener(content);
+  const hasPromo = containsPromoLanguage(content);
+  const hasFile = hasAttachments(message);
   const whitelisted = isWhitelisted(content);
+
   const young = isYoungAccount(message.author);
+  const newToServer = isNewToServer(message.member);
+  const firstMessages = isFirstMessages(message.member);
+  const repeatedBurst = recordAndCheckSpamBurst(message);
+
+  const highRiskMember = young || newToServer || firstMessages;
 
   let action = null;
   let reason = null;
   let skipStrikes = false;
 
-  // Discord invites = immediate ban
   if (hasInvite) {
     action = 'ban';
     reason = 'Posted a Discord invite link';
     skipStrikes = true;
-
-  // Scam phrasing from young accounts = immediate ban
-  } else if (young && hasScamTerms) {
+  } else if (!whitelisted && hasExternal && highRiskMember) {
     action = 'ban';
-    reason = 'Young account posted likely scam/advertising phrasing';
+    reason = 'New/high-risk member posted external link';
     skipStrikes = true;
-
-  // Scam phrasing from normal users = timeout/strike
-  } else if (hasScamTerms) {
+  } else if (!whitelisted && hasExternal && hasMassPing) {
+    action = 'ban';
+    reason = 'External link with @everyone/@here spam';
+    skipStrikes = true;
+  } else if (!whitelisted && hasExternal && hasPromo) {
+    action = 'ban';
+    reason = 'Promotional external link spam';
+    skipStrikes = true;
+  } else if (!whitelisted && hasExternal && repeatedBurst) {
+    action = 'ban';
+    reason = 'Repeated external link spam across channels';
+    skipStrikes = true;
+  } else if (hasShortenedLink) {
+    action = 'ban';
+    reason = 'Shortened/redirect link spam';
+    skipStrikes = true;
+  } else if (hasMassPing && (hasPromo || hasScamTerms)) {
+    action = 'ban';
+    reason = '@everyone/@here promotional spam';
+    skipStrikes = true;
+  } else if (hasScamTerms && highRiskMember) {
+    action = 'ban';
+    reason = 'New/high-risk member posted scam/advertising phrasing';
+    skipStrikes = true;
+  } else if (hasFile && highRiskMember && !normalizeText(content)) {
+    action = 'ban';
+    reason = 'New/high-risk member posted attachment-only content';
+    skipStrikes = true;
+  } else if (hasFile && repeatedBurst) {
+    action = 'ban';
+    reason = 'Repeated attachment/image spam across channels';
+    skipStrikes = true;
+  } else if (hasScamTerms || hasPromo) {
     action = 'timeout';
     reason = 'Spam/scam advertising phrasing detected';
   }
@@ -520,8 +557,15 @@ function evaluateMessageRisk(message) {
       hasInvite,
       hasExternal,
       hasScamTerms,
+      hasMassPing,
+      hasPromo,
+      hasFile,
       whitelisted,
-      young
+      young,
+      newToServer,
+      firstMessages,
+      repeatedBurst,
+      highRiskMember
     }
   };
 }
