@@ -393,12 +393,25 @@ async function applyModerationAction(member, action, reason) {
   if (!member) return 'skipped';
 
   try {
-    if (action === 'ban' && member.bannable) {
-      await member.ban({
-        deleteMessageSeconds: 60 * 60,
-        reason
-      });
-      return 'banned';
+    if (action === 'ban') {
+      try {
+        await member.ban({
+          deleteMessageSeconds: 60 * 60,
+          reason
+        });
+        return 'banned';
+      } catch (memberBanErr) {
+        try {
+          await member.guild.members.ban(member.id, {
+            deleteMessageSeconds: 60 * 60,
+            reason
+          });
+          return 'banned_by_id';
+        } catch (idBanErr) {
+          console.error('Ban failed:', idBanErr.message);
+          return 'ban_failed';
+        }
+      }
     }
 
     if (action === 'timeout' && member.moderatable) {
