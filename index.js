@@ -650,18 +650,24 @@ async function handleAutomodViolation(message, risk) {
 
 async function runMessageModeration(message) {
   try {
-    if (!message?.guild || !message.content) return;
+    if (!message?.guild) return;
+    if (!message.content && !hasAttachments(message)) return;
     if (shouldIgnoreAutomod(message)) return;
+
+    const currentCount = userMessageCounts.get(message.author.id) || 0;
+    userMessageCounts.set(message.author.id, currentCount + 1);
 
     const riskResult = evaluateMessageRisk(message);
 
-    const hasInvite = riskResult.meta.hasInvite;
+    if (riskResult.action) {
+      await handleAutomodViolation(message, riskResult);
+      return;
+    }
+
     const hasExternal = riskResult.meta.hasExternal;
     const whitelisted = riskResult.meta.whitelisted;
 
-    if (hasInvite) {
-      await sendLinkReviewAlert(message, 'invite');
-    } else if (hasExternal && !whitelisted) {
+    if (hasExternal && !whitelisted) {
       await sendLinkReviewAlert(message, 'external');
     }
 
@@ -680,20 +686,15 @@ async function runMessageModeration(message) {
       console.error('riskEngine.analyzeMessage error:', err.message);
     }
 
-    // External risk engine can still enforce if it finds real spam/scam phrasing.
-    // But do not let it escalate links alone into bans/timeouts.
-    if (externalRisk?.action && riskResult.meta.hasScamTerms) {
-      if (!riskResult.action) {
-        riskResult.action = externalRisk.action;
-        riskResult.reason = externalRisk.reason || 'Flagged by AI risk engine';
-      } else if (riskResult.action === 'timeout' && externalRisk.action === 'ban') {
-        riskResult.action = 'ban';
-        riskResult.reason = externalRisk.reason || 'Escalated by AI risk engine';
-      }
-    }
+    if (externalRisk?.action) {
+      const externalRiskResult = {
+        action: externalRisk.action,
+        reason: externalRisk.reason || 'Flagged by AI risk engine',
+        skipStrikes: externalRisk.action === 'ban',
+        meta: riskResult.meta
+      };
 
-    if (riskResult.action) {
-      await handleAutomodViolation(message, riskResult);
+      await handleAutomodViolation(message, externalRiskResult);
     }
   } catch (err) {
     console.error('runMessageModeration error:', err.message);
