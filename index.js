@@ -162,9 +162,17 @@ function containsDiscordInvite(text = '') {
 }
 
 function containsExternalLink(text = '') {
-  const hasUrl = /(https?:\/\/|www\.)/i.test(text);
-  const isDiscordInvite = containsDiscordInvite(text);
-  return hasUrl && !isDiscordInvite;
+  const clean = String(text || '').toLowerCase();
+
+  if (containsDiscordInvite(clean)) return false;
+
+  const hasProtocolUrl = /(https?:\/\/|www\.)/i.test(clean);
+
+  const hasBareDomain =
+    /(?:^|\s)(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|us|ai|xyz|info|app|live|site|online|me)(?:\/[^\s]*)?/i
+      .test(clean);
+
+  return hasProtocolUrl || hasBareDomain;
 }
 
 function containsScamKeywords(text = '') {
