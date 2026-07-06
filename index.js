@@ -156,6 +156,81 @@ function accountAgeMs(user) {
 function isYoungAccount(user) {
   return accountAgeMs(user) < MIN_ACCOUNT_AGE_MS;
 }
+function serverAgeMs(member) {
+  if (!member?.joinedTimestamp) return 0;
+  return Date.now() - member.joinedTimestamp;
+}
+
+function isNewToServer(member) {
+  return serverAgeMs(member) < MIN_SERVER_AGE_MS;
+}
+
+function isFirstMessages(member) {
+  const count = userMessageCounts.get(member.id) || 0;
+  return count <= FIRST_MESSAGE_LIMIT;
+}
+
+function containsMassMention(text = '') {
+  return /@everyone|@here/i.test(text);
+}
+
+function containsShortener(text = '') {
+  return /(bit\.ly\/|tinyurl\.com\/|cutt\.ly\/|rb\.gy\/|linktr\.ee\/|beacons\.ai\/|solo\.to\/)/i.test(text);
+}
+
+function containsPromoLanguage(text = '') {
+  const patterns = [
+    /not trying to sell/i,
+    /structured trade alerts/i,
+    /trade alerts/i,
+    /signals/i,
+    /vip/i,
+    /premium/i,
+    /join/i,
+    /helpful for me/i,
+    /check this out/i,
+    /server/i,
+    /discord/i,
+    /copy trades/i,
+    /analysis/i,
+    /alerts/i,
+    /mentor/i,
+    /profits/i
+  ];
+
+  return patterns.some(rx => rx.test(text));
+}
+
+function hasAttachments(message) {
+  return Number(message.attachments?.size || 0) > 0;
+}
+
+function messageFingerprint(message) {
+  const clean = normalizeText(message.content || '')
+    .replace(/https?:\/\/\S+/gi, '[link]')
+    .replace(/www\.\S+/gi, '[link]');
+
+  return `${clean}|attachments:${message.attachments?.size || 0}`;
+}
+
+function recordAndCheckSpamBurst(message) {
+  const now = Date.now();
+  const windowMs = 2 * 60 * 1000;
+  const key = `${message.guild.id}:${message.author.id}:${messageFingerprint(message)}`;
+
+  const existing = recentMessageBursts.get(key) || {
+    timestamps: [],
+    channels: new Set()
+  };
+
+  existing.timestamps = existing.timestamps.filter(t => now - t < windowMs);
+  existing.timestamps.push(now);
+  existing.channels.add(message.channelId);
+
+  recentMessageBursts.set(key, existing);
+
+  return existing.timestamps.length >= 2 || existing.channels.size >= 2;
+}
 
 function containsDiscordInvite(text = '') {
   return /(discord\.gg\/|discord\.com\/invite\/)/i.test(text);
