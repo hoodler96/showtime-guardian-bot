@@ -66,6 +66,13 @@ const WHITELIST = LINK_WHITELIST
   .filter(Boolean);
 
 const MIN_ACCOUNT_AGE_MS = Number(MIN_ACCOUNT_AGE_DAYS) * 24 * 60 * 60 * 1000;
+const MIN_SERVER_AGE_DAYS = Number(process.env.MIN_SERVER_AGE_DAYS || '14');
+const FIRST_MESSAGE_LIMIT = Number(process.env.FIRST_MESSAGE_LIMIT || '10');
+
+const MIN_SERVER_AGE_MS = MIN_SERVER_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+const userMessageCounts = new Map();
+const recentMessageBursts = new Map();
 
 /* ----------------------------- STARTUP / DB ----------------------------- */
 
