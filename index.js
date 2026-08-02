@@ -252,8 +252,12 @@ return /@everyone|@here/i.test(text);
 }
 
 function containsShortener(text = '') {
-return /(bit.ly/|tinyurl.com/|cutt.ly/|rb.gy/|linktr.ee/|beacons.ai/|solo.to/)/i
-.test(text);
+  const shortenerPattern = new RegExp(
+    '(?:bit\\.ly|tinyurl\\.com|cutt\\.ly|rb\\.gy|linktr\\.ee|beacons\\.ai|solo\\.to)/',
+    'i'
+  );
+
+  return shortenerPattern.test(String(text || ''));
 }
 
 function containsPromoLanguage(text = '') {
