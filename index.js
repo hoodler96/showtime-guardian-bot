@@ -3,11 +3,11 @@ require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const {
-  Client,
-  GatewayIntentBits,
-  Partials,
-  PermissionsBitField,
-  EmbedBuilder
+Client,
+GatewayIntentBits,
+Partials,
+PermissionsBitField,
+EmbedBuilder
 } = require('discord.js');
 
 const riskEngine = require('./utils/riskEngine');
@@ -23,7 +23,7 @@ app.get('/', (_req, res) => res.status(200).send('OK'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Web keep-alive listening on ${PORT}`);
+console.log(`Web keep-alive listening on ${PORT}`);
 });
 
 /* ----------------------------- ENV / CONFIG ----------------------------- */
@@ -35,1010 +35,1728 @@ const GUILD_ID = String(process.env.GUILD_ID || '').trim();
 const REPORT_CHANNEL_ID = String(process.env.REPORT_CHANNEL_ID || '').trim();
 const MOD_LOG_CHANNEL_ID = String(process.env.MOD_LOG_CHANNEL_ID || '').trim();
 
-const PREMIUM_EXEMPT_ROLE_IDS = process.env.PREMIUM_EXEMPT_ROLE_IDS || '';
-const STAFF_ROLE_IDS = process.env.STAFF_ROLE_IDS || '';
+const PREMIUM_EXEMPT_ROLE_IDS =
+process.env.PREMIUM_EXEMPT_ROLE_IDS || '';
+
+const STAFF_ROLE_IDS =
+process.env.STAFF_ROLE_IDS || '';
 
 const PROTECTED_NAME_PATTERNS =
-  process.env.PROTECTED_NAME_PATTERNS ||
-  'showtime247,showtime trades,showtime,admin,moderator,mod,support';
+process.env.PROTECTED_NAME_PATTERNS ||
+'showtime247,showtime trades,showtime,admin,moderator,mod,support';
 
-const MIN_ACCOUNT_AGE_DAYS = process.env.MIN_ACCOUNT_AGE_DAYS || '7';
-const LINK_WHITELIST = process.env.LINK_WHITELIST || '';
+const MIN_ACCOUNT_AGE_DAYS =
+process.env.MIN_ACCOUNT_AGE_DAYS || '7';
+
+const LINK_WHITELIST =
+process.env.LINK_WHITELIST || '';
 
 const PREMIUM_EXEMPT_ROLES = PREMIUM_EXEMPT_ROLE_IDS
-  .split(',')
-  .map(id => id.trim())
-  .filter(Boolean);
+.split(',')
+.map(id => id.trim())
+.filter(Boolean);
 
 const STAFF_ROLES = STAFF_ROLE_IDS
-  .split(',')
-  .map(id => id.trim())
-  .filter(Boolean);
+.split(',')
+.map(id => id.trim())
+.filter(Boolean);
 
 const PROTECTED_PATTERNS = PROTECTED_NAME_PATTERNS
-  .split(',')
-  .map(x => x.trim().toLowerCase())
-  .filter(Boolean);
+.split(',')
+.map(value => value.trim().toLowerCase())
+.filter(Boolean);
 
 const WHITELIST = LINK_WHITELIST
-  .split(',')
-  .map(x => x.trim().toLowerCase())
-  .filter(Boolean);
+.split(',')
+.map(value => value.trim().toLowerCase())
+.filter(Boolean);
 
-const MIN_ACCOUNT_AGE_MS = Number(MIN_ACCOUNT_AGE_DAYS) * 24 * 60 * 60 * 1000;
-const MIN_SERVER_AGE_DAYS = Number(process.env.MIN_SERVER_AGE_DAYS || '14');
-const FIRST_MESSAGE_LIMIT = Number(process.env.FIRST_MESSAGE_LIMIT || '10');
+const MIN_ACCOUNT_AGE_MS =
+Number(MIN_ACCOUNT_AGE_DAYS) * 24 * 60 * 60 * 1000;
 
-const MIN_SERVER_AGE_MS = MIN_SERVER_AGE_DAYS * 24 * 60 * 60 * 1000;
+const MIN_SERVER_AGE_DAYS =
+Number(process.env.MIN_SERVER_AGE_DAYS || '14');
+
+const FIRST_MESSAGE_LIMIT =
+Number(process.env.FIRST_MESSAGE_LIMIT || '10');
+
+const MIN_SERVER_AGE_MS =
+MIN_SERVER_AGE_DAYS * 24 * 60 * 60 * 1000;
 
 const userMessageCounts = new Map();
 const recentMessageBursts = new Map();
+const processedMessageFingerprints = new Map();
 
 /* ----------------------------- STARTUP / DB ----------------------------- */
 
 console.log('Token length:', BOT_TOKEN.length);
-console.log('CLIENT_ID loaded:', CLIENT_ID ? `yes (${CLIENT_ID.length} chars)` : 'no');
-console.log('GUILD_ID loaded:', GUILD_ID ? `yes (${GUILD_ID.length} chars)` : 'no');
-console.log('REPORT_CHANNEL_ID loaded:', REPORT_CHANNEL_ID ? 'yes' : 'no');
-console.log('MOD_LOG_CHANNEL_ID loaded:', MOD_LOG_CHANNEL_ID ? 'yes' : 'no');
+
+console.log(
+'CLIENT_ID loaded:',
+CLIENT_ID ? `yes (${CLIENT_ID.length} chars)` : 'no'
+);
+
+console.log(
+'GUILD_ID loaded:',
+GUILD_ID ? `yes (${GUILD_ID.length} chars)` : 'no'
+);
+
+console.log(
+'REPORT_CHANNEL_ID loaded:',
+REPORT_CHANNEL_ID ? 'yes' : 'no'
+);
+
+console.log(
+'MOD_LOG_CHANNEL_ID loaded:',
+MOD_LOG_CHANNEL_ID ? 'yes' : 'no'
+);
 
 mongoose.connect(MONGO_URI)
-  .then(() => console.log('MongoDB Connected'))
-  .catch((err) => console.error('MongoDB connection failed:', err.message));
+.then(() => {
+console.log('MongoDB Connected');
+})
+.catch(err => {
+console.error('MongoDB connection failed:', err.message);
+});
 
-mongoose.connection.on('error', (err) => {
-  console.error('MongoDB runtime error:', err.message);
+mongoose.connection.on('error', err => {
+console.error('MongoDB runtime error:', err.message);
 });
 
 /* ----------------------------- DISCORD CLIENT ----------------------------- */
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildModeration
-  ],
-  partials: [
-    Partials.Channel,
-    Partials.Message,
-    Partials.GuildMember,
-    Partials.User
-  ]
+intents: [
+GatewayIntentBits.Guilds,
+GatewayIntentBits.GuildMembers,
+GatewayIntentBits.GuildMessages,
+GatewayIntentBits.MessageContent,
+GatewayIntentBits.GuildModeration
+],
+partials: [
+Partials.Channel,
+Partials.Message,
+Partials.GuildMember,
+Partials.User
+]
 });
 
 /* ----------------------------- HELPERS ----------------------------- */
 
 function nowIso() {
-  return new Date().toISOString();
+return new Date().toISOString();
 }
 
 function truncate(text, max = 1000) {
-  if (!text) return 'N/A';
-  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+if (!text) return 'N/A';
+
+return text.length > max
+? `${text.slice(0, max - 3)}...`
+: text;
 }
 
 function normalizeText(text) {
-  return String(text || '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
+return String(text || '')
+.toLowerCase()
+.replace(/\s+/g, ' ')
+.trim();
 }
 
 function memberHasAnyRole(member, roleIds = []) {
-  if (!member || !member.roles?.cache) return false;
-  return roleIds.some(roleId => member.roles.cache.has(roleId));
+if (!member || !member.roles?.cache) return false;
+
+return roleIds.some(roleId =>
+member.roles.cache.has(roleId)
+);
 }
 
 function isPremiumExempt(member) {
-  return memberHasAnyRole(member, PREMIUM_EXEMPT_ROLES);
+return memberHasAnyRole(
+member,
+PREMIUM_EXEMPT_ROLES
+);
 }
 
 function isStaff(member) {
-  if (!member) return false;
-  if (member.permissions?.has(PermissionsBitField.Flags.ManageGuild)) return true;
-  if (member.permissions?.has(PermissionsBitField.Flags.BanMembers)) return true;
-  if (member.permissions?.has(PermissionsBitField.Flags.ModerateMembers)) return true;
-  return memberHasAnyRole(member, STAFF_ROLES);
+if (!member) return false;
+
+if (
+member.permissions?.has(
+PermissionsBitField.Flags.ManageGuild
+)
+) {
+return true;
+}
+
+if (
+member.permissions?.has(
+PermissionsBitField.Flags.BanMembers
+)
+) {
+return true;
+}
+
+if (
+member.permissions?.has(
+PermissionsBitField.Flags.ModerateMembers
+)
+) {
+return true;
+}
+
+return memberHasAnyRole(
+member,
+STAFF_ROLES
+);
 }
 
 function isProtectedName(name = '') {
-  const clean = normalizeText(name);
-  return PROTECTED_PATTERNS.some(pattern => clean.includes(pattern));
+const clean = normalizeText(name);
+
+return PROTECTED_PATTERNS.some(pattern =>
+clean.includes(pattern)
+);
 }
 
 function accountAgeMs(user) {
-  if (!user?.createdTimestamp) return Number.MAX_SAFE_INTEGER;
-  return Date.now() - user.createdTimestamp;
+if (!user?.createdTimestamp) {
+return Number.MAX_SAFE_INTEGER;
+}
+
+return Date.now() - user.createdTimestamp;
 }
 
 function isYoungAccount(user) {
-  return accountAgeMs(user) < MIN_ACCOUNT_AGE_MS;
+return accountAgeMs(user) < MIN_ACCOUNT_AGE_MS;
 }
+
 function serverAgeMs(member) {
-  if (!member?.joinedTimestamp) return 0;
-  return Date.now() - member.joinedTimestamp;
+if (!member?.joinedTimestamp) return 0;
+
+return Date.now() - member.joinedTimestamp;
 }
 
 function isNewToServer(member) {
-  return serverAgeMs(member) < MIN_SERVER_AGE_MS;
+return serverAgeMs(member) < MIN_SERVER_AGE_MS;
 }
 
 function isFirstMessages(member) {
-  const count = userMessageCounts.get(member.id) || 0;
-  return count <= FIRST_MESSAGE_LIMIT;
+const count =
+userMessageCounts.get(member.id) || 0;
+
+return count <= FIRST_MESSAGE_LIMIT;
 }
 
 function containsMassMention(text = '') {
-  return /@everyone|@here/i.test(text);
+return /@everyone|@here/i.test(text);
 }
 
 function containsShortener(text = '') {
-  return /(bit\.ly\/|tinyurl\.com\/|cutt\.ly\/|rb\.gy\/|linktr\.ee\/|beacons\.ai\/|solo\.to\/)/i.test(text);
+return /(bit.ly/|tinyurl.com/|cutt.ly/|rb.gy/|linktr.ee/|beacons.ai/|solo.to/)/i
+.test(text);
 }
 
 function containsPromoLanguage(text = '') {
-  const patterns = [
-    /not trying to sell/i,
-    /structured trade alerts/i,
-    /trade alerts/i,
-    /signals/i,
-    /vip/i,
-    /premium/i,
-    /join/i,
-    /helpful for me/i,
-    /check this out/i,
-    /server/i,
-    /discord/i,
-    /copy trades/i,
-    /analysis/i,
-    /alerts/i,
-    /mentor/i,
-    /profits/i
-  ];
+const patterns = [
+/not trying to sell/i,
+/structured trade alerts/i,
+/trade alerts/i,
+/dm me for (?:signals|trades|access|details)/i,
+/join (?:my|our|the) (?:server|discord|group|community)/i,
+/check (?:this|my|our) (?:server|discord|group|channel) out/i,
+/copy (?:my|our) trades/i,
+/premium (?:signals|alerts|group|server|access)/i,
+/vip (?:signals|alerts|group|server|access)/i,
+/trading mentor/i,
+/guaranteed profits?/i
+];
 
-  return patterns.some(rx => rx.test(text));
+return patterns.some(pattern =>
+pattern.test(text)
+);
 }
 
 function hasAttachments(message) {
-  return Number(message.attachments?.size || 0) > 0;
+return Number(
+message.attachments?.size || 0
+) > 0;
 }
 
 function messageFingerprint(message) {
-  const clean = normalizeText(message.content || '')
-    .replace(/https?:\/\/\S+/gi, '[link]')
-    .replace(/www\.\S+/gi, '[link]');
+const clean = normalizeText(
+message.content || ''
+)
+.replace(/https?://\S+/gi, '[link]')
+.replace(/[www.\S+/gi](http://www.\S+/gi), '[link]');
 
-  return `${clean}|attachments:${message.attachments?.size || 0}`;
+const attachments = message.attachments
+? [...message.attachments.values()]
+: [];
+
+const attachmentSignature = attachments
+.map(attachment => {
+return [
+attachment.id || '',
+attachment.name || '',
+attachment.size || 0
+].join(':');
+})
+.sort()
+.join(',');
+
+return [
+clean,
+`attachments:${attachmentSignature || 'none'}`
+].join('|');
+}
+
+function shouldSkipDuplicateMessage(message) {
+if (!message?.id) return false;
+
+const now = Date.now();
+const ttlMs = 30 * 1000;
+
+const key =
+`${message.id}:${messageFingerprint(message)}`;
+
+const lastProcessedAt =
+processedMessageFingerprints.get(key);
+
+for (
+const [storedKey, timestamp]
+of processedMessageFingerprints.entries()
+) {
+if (now - timestamp > ttlMs) {
+processedMessageFingerprints.delete(storedKey);
+}
+}
+
+if (
+lastProcessedAt &&
+now - lastProcessedAt < ttlMs
+) {
+return true;
+}
+
+processedMessageFingerprints.set(key, now);
+
+return false;
 }
 
 function recordAndCheckSpamBurst(message) {
-  const now = Date.now();
-  const windowMs = 2 * 60 * 1000;
-  const key = `${message.guild.id}:${message.author.id}:${messageFingerprint(message)}`;
+const now = Date.now();
+const windowMs = 2 * 60 * 1000;
 
-  const existing = recentMessageBursts.get(key) || {
-    timestamps: [],
-    channels: new Set()
-  };
+const key = [
+message.guild.id,
+message.author.id,
+messageFingerprint(message)
+].join(':');
 
-  existing.timestamps = existing.timestamps.filter(t => now - t < windowMs);
-  existing.timestamps.push(now);
-  existing.channels.add(message.channelId);
+const existing =
+recentMessageBursts.get(key) || {
+timestamps: [],
+channels: new Set()
+};
 
-  recentMessageBursts.set(key, existing);
+existing.timestamps =
+existing.timestamps.filter(timestamp =>
+now - timestamp < windowMs
+);
 
-  return existing.timestamps.length >= 2 || existing.channels.size >= 2;
+existing.timestamps.push(now);
+existing.channels.add(message.channelId);
+
+recentMessageBursts.set(key, existing);
+
+return (
+existing.timestamps.length >= 2 ||
+existing.channels.size >= 2
+);
 }
 
 function containsDiscordInvite(text = '') {
-  return /(discord\.gg\/|discord\.com\/invite\/)/i.test(text);
+return /(discord.gg/|discord.com/invite/)/i
+.test(text);
 }
 
 function containsExternalLink(text = '') {
-  const clean = String(text || '').toLowerCase();
+const clean =
+String(text || '').toLowerCase();
 
-  if (containsDiscordInvite(clean)) return false;
+if (containsDiscordInvite(clean)) {
+return false;
+}
 
-  const hasProtocolUrl = /(https?:\/\/|www\.)/i.test(clean);
+const hasProtocolUrl =
+/(https?://|[www.)/i.test(clean](http://www.%29/i.test%28clean));
 
-  const hasBareDomain =
-    /(?:^|\s)(?:[a-z0-9-]+\.)+(?:com|net|org|io|co|us|ai|xyz|info|app|live|site|online|me)(?:\/[^\s]*)?/i
-      .test(clean);
+const hasBareDomain =
+/(?:^|\s)(?:[a-z0-9-]+.)+(?:com|net|org|io|co|us|ai|xyz|info|app|live|site|online|me)(?:/[^\s]*)?/i
+.test(clean);
 
-  return hasProtocolUrl || hasBareDomain;
+return hasProtocolUrl || hasBareDomain;
 }
 
 function containsScamKeywords(text = '') {
-  const patterns = [
-    /guaranteed profit/i,
-    /dm me for signals/i,
-    /join my server/i,
-    /forex mentor/i,
-    /crypto recovery/i,
-    /double your money/i,
-    /investment group/i,
-    /100% win rate/i,
-    /send me a message/i,
-    /limited spots/i,
-    /free vip/i,
-    /claim your winnings/i,
-    /airdrop/i,
-    /copy my trades/i,
-    /message me to earn/i,
-    /recover your funds/i,
-    /pump group/i,
-    /signal group/i
-  ];
+const patterns = [
+/guaranteed profit/i,
+/dm me for signals/i,
+/join my server/i,
+/forex mentor/i,
+/crypto recovery/i,
+/double your money/i,
+/investment group/i,
+/100% win rate/i,
+/send me a message/i,
+/limited spots/i,
+/free vip/i,
+/claim your winnings/i,
+/airdrop/i,
+/copy my trades/i,
+/message me to earn/i,
+/recover your funds/i,
+/pump group/i,
+/signal group/i
+];
 
-  return patterns.some(rx => rx.test(text));
+return patterns.some(pattern =>
+pattern.test(text)
+);
 }
 
 function isWhitelisted(content = '') {
-  const clean = content.toLowerCase();
-  return WHITELIST.some(domain => clean.includes(domain));
+const clean =
+content.toLowerCase();
+
+return WHITELIST.some(domain =>
+clean.includes(domain)
+);
 }
 
 async function getTextChannel(channelId) {
-  if (!channelId) return null;
+if (!channelId) return null;
 
-  try {
-    const channel = await client.channels.fetch(channelId);
-    if (!channel || !channel.isTextBased()) return null;
-    return channel;
-  } catch {
-    return null;
-  }
+try {
+const channel =
+await client.channels.fetch(channelId);
+
+```
+if (!channel || !channel.isTextBased()) {
+  return null;
+}
+
+return channel;
+```
+
+} catch {
+return null;
+}
 }
 
 async function sendModLog({
-  guild,
-  title,
-  color = 0xff0000,
-  fields = [],
-  description = '',
-  footer = 'Showtime Guardian'
+guild,
+title,
+color = 0xff0000,
+fields = [],
+description = '',
+footer = 'Showtime Guardian'
 }) {
-  try {
-    if (!guild || !MOD_LOG_CHANNEL_ID) return;
-
-    const channel = await getTextChannel(MOD_LOG_CHANNEL_ID);
-    if (!channel) return;
-
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setColor(color)
-      .setTimestamp()
-      .setFooter({ text: footer });
-
-    if (description) embed.setDescription(truncate(description, 4096));
-    if (fields.length) embed.addFields(fields);
-
-    await channel.send({ embeds: [embed] });
-  } catch (err) {
-    console.error('sendModLog error:', err.message);
-  }
+try {
+if (!guild || !MOD_LOG_CHANNEL_ID) {
+return;
 }
 
-async function sendReportEmbed({ guild, reportDoc }) {
-  try {
-    if (!guild || !REPORT_CHANNEL_ID || !reportDoc) return;
+```
+const channel =
+  await getTextChannel(MOD_LOG_CHANNEL_ID);
 
-    const channel = await getTextChannel(REPORT_CHANNEL_ID);
-    if (!channel) return;
+if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setTitle('🚨 New User Report')
-      .setColor(0xffa500)
-      .addFields(
-        {
-          name: 'Reporter',
-          value: `<@${reportDoc.reporterId}> (${reportDoc.reporterTag})`,
-          inline: false
-        },
-        {
-          name: 'Reported User',
-          value: `<@${reportDoc.targetId}> (${reportDoc.targetTag})`,
-          inline: false
-        },
-        {
-          name: 'Reason',
-          value: truncate(reportDoc.reason || 'No reason provided', 1024),
-          inline: false
-        },
-        {
-          name: 'Status',
-          value: reportDoc.status || 'open',
-          inline: true
-        }
-      )
-      .setTimestamp();
+const embed = new EmbedBuilder()
+  .setTitle(title)
+  .setColor(color)
+  .setTimestamp()
+  .setFooter({
+    text: footer
+  });
 
-    if (reportDoc.messageLink) {
-      embed.addFields({
-        name: 'Message Link',
-        value: reportDoc.messageLink,
-        inline: false
-      });
+if (description) {
+  embed.setDescription(
+    truncate(description, 4096)
+  );
+}
+
+if (fields.length) {
+  embed.addFields(fields);
+}
+
+await channel.send({
+  embeds: [embed]
+});
+```
+
+} catch (err) {
+console.error(
+'sendModLog error:',
+err.message
+);
+}
+}
+
+async function sendReportEmbed({
+guild,
+reportDoc
+}) {
+try {
+if (
+!guild ||
+!REPORT_CHANNEL_ID ||
+!reportDoc
+) {
+return;
+}
+
+```
+const channel =
+  await getTextChannel(REPORT_CHANNEL_ID);
+
+if (!channel) return;
+
+const embed = new EmbedBuilder()
+  .setTitle('🚨 New User Report')
+  .setColor(0xffa500)
+  .addFields(
+    {
+      name: 'Reporter',
+      value:
+        `<@${reportDoc.reporterId}> ` +
+        `(${reportDoc.reporterTag})`,
+      inline: false
+    },
+    {
+      name: 'Reported User',
+      value:
+        `<@${reportDoc.targetId}> ` +
+        `(${reportDoc.targetTag})`,
+      inline: false
+    },
+    {
+      name: 'Reason',
+      value: truncate(
+        reportDoc.reason ||
+          'No reason provided',
+        1024
+      ),
+      inline: false
+    },
+    {
+      name: 'Status',
+      value:
+        reportDoc.status || 'open',
+      inline: true
     }
+  )
+  .setTimestamp();
 
-    await channel.send({ embeds: [embed] });
-  } catch (err) {
-    console.error('sendReportEmbed error:', err.message);
-  }
+if (reportDoc.messageLink) {
+  embed.addFields({
+    name: 'Message Link',
+    value: reportDoc.messageLink,
+    inline: false
+  });
+}
+
+await channel.send({
+  embeds: [embed]
+});
+```
+
+} catch (err) {
+console.error(
+'sendReportEmbed error:',
+err.message
+);
+}
 }
 
 async function addStrike(userId, guildId) {
-  let record = await Strike.findOne({ userId, guildId });
+let record = await Strike.findOne({
+userId,
+guildId
+});
 
-  if (!record) {
-    record = await Strike.create({
-      userId,
-      guildId,
-      count: 1,
-      lastStrikeAt: new Date()
-    });
-    return 1;
-  }
+if (!record) {
+record = await Strike.create({
+userId,
+guildId,
+count: 1,
+lastStrikeAt: new Date()
+});
 
-  record.count += 1;
-  record.lastStrikeAt = new Date();
-  await record.save();
+```
+return 1;
+```
 
-  return record.count;
 }
 
-async function applyModerationAction(member, action, reason) {
-  if (!member) return 'skipped';
+record.count += 1;
+record.lastStrikeAt = new Date();
 
-  try {
-    if (action === 'ban') {
-      try {
-        await member.ban({
-          deleteMessageSeconds: 60 * 60,
+await record.save();
+
+return record.count;
+}
+
+async function applyModerationAction(
+member,
+action,
+reason
+) {
+if (!member) return 'skipped';
+
+try {
+if (action === 'ban') {
+try {
+await member.ban({
+deleteMessageSeconds: 60 * 60,
+reason
+});
+
+```
+    return 'banned';
+  } catch (memberBanErr) {
+    try {
+      await member.guild.members.ban(
+        member.id,
+        {
+          deleteMessageSeconds:
+            60 * 60,
           reason
-        });
-        return 'banned';
-      } catch (memberBanErr) {
-        try {
-          await member.guild.members.ban(member.id, {
-            deleteMessageSeconds: 60 * 60,
-            reason
-          });
-          return 'banned_by_id';
-        } catch (idBanErr) {
-          console.error('Ban failed:', idBanErr.message);
-          return 'ban_failed';
         }
-      }
-    }
+      );
 
-    if (action === 'timeout' && member.moderatable) {
-      await member.timeout(10 * 60 * 1000, reason);
-      return 'timed_out';
-    }
+      return 'banned_by_id';
+    } catch (idBanErr) {
+      console.error(
+        'Ban failed:',
+        idBanErr.message
+      );
 
-    return 'skipped';
-  } catch (err) {
-    console.error('applyModerationAction error:', err.message);
-    return 'error';
+      return 'ban_failed';
+    }
   }
+}
+
+if (
+  action === 'timeout' &&
+  member.moderatable
+) {
+  await member.timeout(
+    10 * 60 * 1000,
+    reason
+  );
+
+  return 'timed_out';
+}
+
+return 'skipped';
+```
+
+} catch (err) {
+console.error(
+'applyModerationAction error:',
+err.message
+);
+
+```
+return 'error';
+```
+
+}
 }
 
 function shouldIgnoreAutomod(message) {
-  if (!message?.guild || !message?.member) return true;
-  if (message.author?.bot) return true;
-  if (isStaff(message.member)) return true;
-  if (isPremiumExempt(message.member)) return true;
-  return false;
+if (!message?.guild || !message?.member) {
+return true;
 }
 
-/* ----------------------------- LINK ALERTS ONLY ----------------------------- */
+if (message.author?.bot) {
+return true;
+}
 
-async function sendLinkReviewAlert(message, linkType) {
-  try {
-    await sendModLog({
-      guild: message.guild,
-      title: linkType === 'invite'
-        ? '⚠️ Discord Invite Posted — Review Needed'
-        : '⚠️ External Link Posted — Review Needed',
-      color: 0xffcc00,
-      fields: [
-        {
-          name: 'User',
-          value: `${message.author.tag} (${message.author.id})`,
-          inline: false
-        },
-        {
-          name: 'Channel',
-          value: `${message.channel}`,
-          inline: true
-        },
-        {
-          name: 'Account Age',
-          value: isYoungAccount(message.author) ? 'Young account' : 'Established account',
-          inline: true
-        },
-        {
-          name: 'Action Taken',
-          value: 'No ban. No timeout. Moderator review only.',
-          inline: false
-        },
-        {
-          name: 'Message',
-          value: truncate(message.content || '[no content]', 1024),
-          inline: false
-        }
-      ]
-    });
+if (isStaff(message.member)) {
+return true;
+}
 
-    console.log(`[LinkReview] ${message.author.tag} posted ${linkType} link. Alert only.`);
-  } catch (err) {
-    console.error('sendLinkReviewAlert error:', err.message);
-  }
+if (isPremiumExempt(message.member)) {
+return true;
+}
+
+return false;
+}
+
+/* ----------------------------- LINK ALERTS ----------------------------- */
+
+async function sendLinkReviewAlert(
+message,
+linkType
+) {
+try {
+await sendModLog({
+guild: message.guild,
+title:
+linkType === 'invite'
+? '⚠️ Discord Invite Posted — Review Needed'
+: '⚠️ External Link Posted — Review Needed',
+color: 0xffcc00,
+fields: [
+{
+name: 'User',
+value:
+`${message.author.tag} ` +
+`(${message.author.id})`,
+inline: false
+},
+{
+name: 'Channel',
+value: `${message.channel}`,
+inline: true
+},
+{
+name: 'Account Age',
+value: isYoungAccount(
+message.author
+)
+? 'Young account'
+: 'Established account',
+inline: true
+},
+{
+name: 'Action Taken',
+value:
+'No ban. No timeout. ' +
+'Moderator review only.',
+inline: false
+},
+{
+name: 'Message',
+value: truncate(
+message.content ||
+'[no written content]',
+1024
+),
+inline: false
+}
+]
+});
+
+```
+console.log(
+  `[LinkReview] ${message.author.tag} ` +
+  `posted ${linkType} link. Alert only.`
+);
+```
+
+} catch (err) {
+console.error(
+'sendLinkReviewAlert error:',
+err.message
+);
+}
 }
 
 /* ----------------------------- MESSAGE RISK ----------------------------- */
 
 function evaluateMessageRisk(message) {
-  const content = message.content || '';
+const content =
+message.content || '';
 
-  const hasInvite = containsDiscordInvite(content);
-  const hasExternal = containsExternalLink(content);
-  const hasScamTerms = containsScamKeywords(content);
-  const hasMassPing = containsMassMention(content);
-  const hasShortenedLink = containsShortener(content);
-  const hasPromo = containsPromoLanguage(content);
-  const hasFile = hasAttachments(message);
-  const whitelisted = isWhitelisted(content);
+const hasInvite =
+containsDiscordInvite(content);
 
-  const young = isYoungAccount(message.author);
-  const newToServer = isNewToServer(message.member);
-  const firstMessages = isFirstMessages(message.member);
-  const repeatedBurst = recordAndCheckSpamBurst(message);
+const hasExternal =
+containsExternalLink(content);
 
-  const highRiskMember = young || newToServer || firstMessages;
+const hasScamTerms =
+containsScamKeywords(content);
 
-  let action = null;
-  let reason = null;
-  let skipStrikes = false;
+const hasMassPing =
+containsMassMention(content);
 
+const hasShortenedLink =
+containsShortener(content);
+
+const hasPromo =
+containsPromoLanguage(content);
+
+const hasFile =
+hasAttachments(message);
+
+const whitelisted =
+isWhitelisted(content);
+
+const young =
+isYoungAccount(message.author);
+
+const newToServer =
+isNewToServer(message.member);
+
+const firstMessages =
+isFirstMessages(message.member);
+
+const repeatedBurst =
+recordAndCheckSpamBurst(message);
+
+const highRiskMember =
+young ||
+newToServer ||
+firstMessages;
+
+let action = null;
+let reason = null;
+let skipStrikes = false;
+
+/*
+
+* Discord server invite links remain
+* an immediate ban.
+  */
   if (hasInvite) {
-    action = 'ban';
-    reason = 'Posted a Discord invite link';
-    skipStrikes = true;
-  } else if (!whitelisted && hasExternal && highRiskMember) {
-    action = 'ban';
-    reason = 'New/high-risk member posted external link';
-    skipStrikes = true;
-  } else if (!whitelisted && hasExternal && hasMassPing) {
-    action = 'ban';
-    reason = 'External link with @everyone/@here spam';
-    skipStrikes = true;
-  } else if (!whitelisted && hasExternal && hasPromo) {
-    action = 'ban';
-    reason = 'Promotional external link spam';
-    skipStrikes = true;
-  } else if (!whitelisted && hasExternal && repeatedBurst) {
-    action = 'ban';
-    reason = 'Repeated external link spam across channels';
-    skipStrikes = true;
-  } else if (hasShortenedLink) {
-    action = 'ban';
-    reason = 'Shortened/redirect link spam';
-    skipStrikes = true;
-  } else if (hasMassPing && (hasPromo || hasScamTerms)) {
-    action = 'ban';
-    reason = '@everyone/@here promotional spam';
-    skipStrikes = true;
-  } else if (hasScamTerms && highRiskMember) {
-    action = 'ban';
-    reason = 'New/high-risk member posted scam/advertising phrasing';
-    skipStrikes = true;
-  } else if (hasFile && highRiskMember && !normalizeText(content)) {
-    action = 'ban';
-    reason = 'New/high-risk member posted attachment-only content';
-    skipStrikes = true;
-  } else if (hasFile && repeatedBurst) {
-    action = 'ban';
-    reason = 'Repeated attachment/image spam across channels';
-    skipStrikes = true;
-  } else if (hasScamTerms || hasPromo) {
-    action = 'timeout';
-    reason = 'Spam/scam advertising phrasing detected';
+  action = 'ban';
+  reason =
+  'Posted a Discord invite link';
+  skipStrikes = true;
   }
 
-  return {
-    action,
-    reason,
-    skipStrikes,
-    meta: {
-      hasInvite,
-      hasExternal,
-      hasScamTerms,
-      hasMassPing,
-      hasPromo,
-      hasFile,
-      whitelisted,
-      young,
-      newToServer,
-      firstMessages,
-      repeatedBurst,
-      highRiskMember
-    }
-  };
+/*
+
+* External links are only auto-banned
+* when combined with clear spam behavior.
+  */
+  else if (
+  !whitelisted &&
+  hasExternal &&
+  hasMassPing
+  ) {
+  action = 'ban';
+  reason =
+  'External link with ' +
+  '@everyone/@here spam';
+  skipStrikes = true;
+  }
+
+else if (
+!whitelisted &&
+hasExternal &&
+hasPromo
+) {
+action = 'ban';
+reason =
+'Promotional external link spam';
+skipStrikes = true;
 }
 
-async function handleAutomodViolation(message, risk) {
-  if (!message?.guild || !risk?.action) return;
+else if (
+!whitelisted &&
+hasExternal &&
+repeatedBurst
+) {
+action = 'ban';
+reason =
+'Repeated external link spam ' +
+'across channels';
+skipStrikes = true;
+}
 
-  const guild = message.guild;
-  const member = message.member;
+else if (hasShortenedLink) {
+action = 'ban';
+reason =
+'Shortened/redirect link spam';
+skipStrikes = true;
+}
 
-  try {
-    if (message.deletable) {
-      await message.delete().catch(() => null);
-    }
+else if (
+hasMassPing &&
+(hasPromo || hasScamTerms)
+) {
+action = 'ban';
+reason =
+'@everyone/@here promotional spam';
+skipStrikes = true;
+}
 
-    let finalAction = risk.action;
-    let strikeCount = null;
+else if (
+hasScamTerms &&
+highRiskMember
+) {
+action = 'ban';
+reason =
+'New/high-risk member posted ' +
+'scam/advertising phrasing';
+skipStrikes = true;
+}
 
-    if (finalAction !== 'ban' && !risk.skipStrikes) {
-      strikeCount = await addStrike(member.id, guild.id);
+/*
 
-      if (strikeCount >= 3) {
-        finalAction = 'ban';
-      } else {
-        finalAction = 'timeout';
-      }
-    }
-
-    const result = await applyModerationAction(
-      member,
-      finalAction,
-      strikeCount
-        ? `Strike ${strikeCount}: ${risk.reason}`
-        : `AutoMod: ${risk.reason}`
-    );
-
-    await sendModLog({
-      guild,
-      title: finalAction === 'ban'
-        ? '🔨 Auto Enforcement: Ban'
-        : '⏱️ Auto Enforcement: Timeout',
-      color: finalAction === 'ban' ? 0xff0000 : 0xff9900,
-      fields: [
-        {
-          name: 'User',
-          value: `${member.user.tag} (${member.id})`,
-          inline: false
-        },
-        {
-          name: 'Action',
-          value: `${finalAction} (${result})`,
-          inline: true
-        },
-        {
-          name: 'Reason',
-          value: risk.reason,
-          inline: true
-        },
-        ...(strikeCount
-          ? [{ name: 'Strike Count', value: String(strikeCount), inline: true }]
-          : []),
-        {
-          name: 'Channel',
-          value: `${message.channel}`,
-          inline: true
-        },
-        {
-          name: 'Message',
-          value: truncate(message.content || '[no content]'),
-          inline: false
-        }
-      ]
-    });
-
-    console.log(
-      `[AutoMod][${finalAction.toUpperCase()}] ${member.user.tag} | ${risk.reason} | strike=${strikeCount ?? 'n/a'}`
-    );
-  } catch (err) {
-    console.error('handleAutomodViolation error:', err.message);
+* Pictures and files are intentionally
+* not moderation violations.
+*
+* New members are allowed to post
+* attachment-only messages.
+  */
+  else if (
+  hasScamTerms ||
+  hasPromo
+  ) {
+  action = 'timeout';
+  reason =
+  'Spam/scam advertising phrasing detected';
   }
+
+return {
+action,
+reason,
+skipStrikes,
+meta: {
+hasInvite,
+hasExternal,
+hasScamTerms,
+hasMassPing,
+hasPromo,
+hasFile,
+whitelisted,
+young,
+newToServer,
+firstMessages,
+repeatedBurst,
+highRiskMember
+}
+};
+}
+
+async function handleAutomodViolation(
+message,
+risk
+) {
+if (
+!message?.guild ||
+!risk?.action
+) {
+return;
+}
+
+const guild = message.guild;
+const member = message.member;
+
+try {
+if (message.deletable) {
+await message.delete()
+.catch(() => null);
+}
+
+```
+let finalAction = risk.action;
+let strikeCount = null;
+
+if (
+  finalAction !== 'ban' &&
+  !risk.skipStrikes
+) {
+  strikeCount = await addStrike(
+    member.id,
+    guild.id
+  );
+
+  if (strikeCount >= 3) {
+    finalAction = 'ban';
+  } else {
+    finalAction = 'timeout';
+  }
+}
+
+const moderationReason =
+  strikeCount
+    ? `Strike ${strikeCount}: ${risk.reason}`
+    : `AutoMod: ${risk.reason}`;
+
+const result =
+  await applyModerationAction(
+    member,
+    finalAction,
+    moderationReason
+  );
+
+await sendModLog({
+  guild,
+  title:
+    finalAction === 'ban'
+      ? '🔨 Auto Enforcement: Ban'
+      : '⏱️ Auto Enforcement: Timeout',
+  color:
+    finalAction === 'ban'
+      ? 0xff0000
+      : 0xff9900,
+  fields: [
+    {
+      name: 'User',
+      value:
+        `${member.user.tag} ` +
+        `(${member.id})`,
+      inline: false
+    },
+    {
+      name: 'Action',
+      value:
+        `${finalAction} (${result})`,
+      inline: true
+    },
+    {
+      name: 'Reason',
+      value: risk.reason,
+      inline: true
+    },
+    ...(strikeCount
+      ? [
+          {
+            name: 'Strike Count',
+            value:
+              String(strikeCount),
+            inline: true
+          }
+        ]
+      : []),
+    {
+      name: 'Channel',
+      value: `${message.channel}`,
+      inline: true
+    },
+    {
+      name: 'Message',
+      value: truncate(
+        message.content ||
+          '[no written content]',
+        1024
+      ),
+      inline: false
+    }
+  ]
+});
+
+console.log(
+  `[AutoMod][${finalAction.toUpperCase()}] ` +
+  `${member.user.tag} | ` +
+  `${risk.reason} | ` +
+  `strike=${strikeCount ?? 'n/a'}`
+);
+```
+
+} catch (err) {
+console.error(
+'handleAutomodViolation error:',
+err.message
+);
+}
 }
 
 async function runMessageModeration(message) {
-  try {
-    if (!message?.guild) return;
-    if (!message.content && !hasAttachments(message)) return;
-    if (shouldIgnoreAutomod(message)) return;
+try {
+if (!message?.guild) return;
 
-    const currentCount = userMessageCounts.get(message.author.id) || 0;
-    userMessageCounts.set(message.author.id, currentCount + 1);
+```
+if (
+  !message.content &&
+  !hasAttachments(message)
+) {
+  return;
+}
 
-    const riskResult = evaluateMessageRisk(message);
+if (shouldIgnoreAutomod(message)) {
+  return;
+}
 
-    if (riskResult.action) {
-      await handleAutomodViolation(message, riskResult);
-      return;
-    }
+/*
+ * Stops the same Discord message
+ * from being processed by both
+ * messageCreate and messageUpdate.
+ */
+if (shouldSkipDuplicateMessage(message)) {
+  return;
+}
 
-    const hasExternal = riskResult.meta.hasExternal;
-    const whitelisted = riskResult.meta.whitelisted;
+const currentCount =
+  userMessageCounts.get(
+    message.author.id
+  ) || 0;
 
-    if (hasExternal && !whitelisted) {
-      await sendLinkReviewAlert(message, 'external');
-    }
+userMessageCounts.set(
+  message.author.id,
+  currentCount + 1
+);
 
-    let externalRisk = null;
+const riskResult =
+  evaluateMessageRisk(message);
 
-    try {
-      if (typeof riskEngine?.analyzeMessage === 'function') {
-        externalRisk = await riskEngine.analyzeMessage({
-          content: message.content,
-          username: message.author?.username,
-          displayName: message.member?.displayName,
-          accountAgeMs: accountAgeMs(message.author)
-        });
-      }
-    } catch (err) {
-      console.error('riskEngine.analyzeMessage error:', err.message);
-    }
+if (riskResult.action) {
+  await handleAutomodViolation(
+    message,
+    riskResult
+  );
 
-    if (externalRisk?.action) {
-      const externalRiskResult = {
-        action: externalRisk.action,
-        reason: externalRisk.reason || 'Flagged by AI risk engine',
-        skipStrikes: externalRisk.action === 'ban',
-        meta: riskResult.meta
-      };
+  return;
+}
 
-      await handleAutomodViolation(message, externalRiskResult);
-    }
-  } catch (err) {
-    console.error('runMessageModeration error:', err.message);
+const hasExternal =
+  riskResult.meta.hasExternal;
+
+const whitelisted =
+  riskResult.meta.whitelisted;
+
+/*
+ * Ordinary external links alert
+ * moderators but do not automatically
+ * punish the member.
+ */
+if (
+  hasExternal &&
+  !whitelisted
+) {
+  await sendLinkReviewAlert(
+    message,
+    'external'
+  );
+}
+
+let externalRisk = null;
+
+try {
+  if (
+    typeof riskEngine?.analyzeMessage ===
+    'function'
+  ) {
+    externalRisk =
+      await riskEngine.analyzeMessage({
+        content: message.content,
+        username:
+          message.author?.username,
+        displayName:
+          message.member?.displayName,
+        accountAgeMs:
+          accountAgeMs(message.author)
+      });
   }
+} catch (err) {
+  console.error(
+    'riskEngine.analyzeMessage error:',
+    err.message
+  );
+}
+
+if (externalRisk?.action) {
+  const externalRiskResult = {
+    action: externalRisk.action,
+    reason:
+      externalRisk.reason ||
+      'Flagged by AI risk engine',
+    skipStrikes:
+      externalRisk.action === 'ban',
+    meta: riskResult.meta
+  };
+
+  await handleAutomodViolation(
+    message,
+    externalRiskResult
+  );
+}
+```
+
+} catch (err) {
+console.error(
+'runMessageModeration error:',
+err.message
+);
+}
 }
 
 /* ----------------------------- JOIN / NAME REVIEW ----------------------------- */
 
-async function checkMemberImpersonation(member) {
-  if (!member?.guild || !member?.user) return;
+async function checkMemberImpersonation(
+member
+) {
+if (
+!member?.guild ||
+!member?.user
+) {
+return;
+}
 
-  try {
-    if (isStaff(member) || isPremiumExempt(member)) return;
+try {
+if (
+isStaff(member) ||
+isPremiumExempt(member)
+) {
+return;
+}
 
-    const username = normalizeText(member.user.username);
-    const displayName = normalizeText(
-      member.displayName || member.user.globalName || member.user.username
-    );
+```
+const username =
+  normalizeText(
+    member.user.username
+  );
 
-    const suspicious =
-      isProtectedName(username) ||
-      isProtectedName(displayName);
+const displayName =
+  normalizeText(
+    member.displayName ||
+    member.user.globalName ||
+    member.user.username
+  );
 
-    if (!suspicious) return;
+const suspicious =
+  isProtectedName(username) ||
+  isProtectedName(displayName);
 
-    const reason = 'Possible staff/brand name match';
+if (!suspicious) return;
 
-    await sendModLog({
-      guild: member.guild,
-      title: '⚠️ Name Review Flag',
-      color: 0xffcc00,
-      fields: [
-        {
-          name: 'User',
-          value: `${member.user.tag} (${member.id})`,
-          inline: false
-        },
-        {
-          name: 'Display Name',
-          value: truncate(member.displayName || 'N/A', 256),
-          inline: true
-        },
-        {
-          name: 'Username',
-          value: truncate(member.user.username || 'N/A', 256),
-          inline: true
-        },
-        {
-          name: 'Action Taken',
-          value: 'No ban. Moderator review only.',
-          inline: false
-        },
-        {
-          name: 'Reason',
-          value: reason,
-          inline: false
-        }
-      ]
-    });
-  } catch (err) {
-    console.error('checkMemberImpersonation error:', err.message);
-  }
+const reason =
+  'Possible staff/brand name match';
+
+await sendModLog({
+  guild: member.guild,
+  title: '⚠️ Name Review Flag',
+  color: 0xffcc00,
+  fields: [
+    {
+      name: 'User',
+      value:
+        `${member.user.tag} ` +
+        `(${member.id})`,
+      inline: false
+    },
+    {
+      name: 'Display Name',
+      value: truncate(
+        member.displayName || 'N/A',
+        256
+      ),
+      inline: true
+    },
+    {
+      name: 'Username',
+      value: truncate(
+        member.user.username || 'N/A',
+        256
+      ),
+      inline: true
+    },
+    {
+      name: 'Action Taken',
+      value:
+        'No ban. Moderator review only.',
+      inline: false
+    },
+    {
+      name: 'Reason',
+      value: reason,
+      inline: false
+    }
+  ]
+});
+```
+
+} catch (err) {
+console.error(
+'checkMemberImpersonation error:',
+err.message
+);
+}
 }
 
 async function performJoinVetting(member) {
-  if (!member?.guild || !member?.user) return;
+if (
+!member?.guild ||
+!member?.user
+) {
+return;
+}
 
-  try {
-    if (isStaff(member) || isPremiumExempt(member)) return;
+try {
+if (
+isStaff(member) ||
+isPremiumExempt(member)
+) {
+return;
+}
 
-    const young = isYoungAccount(member.user);
-    const suspiciousName =
-      isProtectedName(member.displayName) ||
-      isProtectedName(member.user.username);
+```
+const young =
+  isYoungAccount(member.user);
 
-    try {
-      if (typeof raidDetection?.trackJoin === 'function') {
-        await raidDetection.trackJoin(member.guild.id, member.user.id);
-      }
-    } catch (err) {
-      console.error('raidDetection.trackJoin error:', err.message);
-    }
+const suspiciousName =
+  isProtectedName(
+    member.displayName
+  ) ||
+  isProtectedName(
+    member.user.username
+  );
 
-    await sendModLog({
-      guild: member.guild,
-      title: '👤 Member Joined',
-      color: 0x3498db,
-      fields: [
-        {
-          name: 'User',
-          value: `${member.user.tag} (${member.id})`,
-          inline: false
-        },
-        {
-          name: 'Account Created',
-          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`,
-          inline: false
-        },
-        {
-          name: 'Young Account',
-          value: young ? 'Yes' : 'No',
-          inline: true
-        },
-        {
-          name: 'Protected Name Match',
-          value: suspiciousName ? 'Yes' : 'No',
-          inline: true
-        },
-        {
-          name: 'Action Taken',
-          value: 'Join logged. No automatic name ban.',
-          inline: false
-        }
-      ]
-    });
-
-    if (suspiciousName) {
-      await checkMemberImpersonation(member);
-    }
-  } catch (err) {
-    console.error('performJoinVetting error:', err.message);
+try {
+  if (
+    typeof raidDetection?.trackJoin ===
+    'function'
+  ) {
+    await raidDetection.trackJoin(
+      member.guild.id,
+      member.user.id
+    );
   }
+} catch (err) {
+  console.error(
+    'raidDetection.trackJoin error:',
+    err.message
+  );
+}
+
+await sendModLog({
+  guild: member.guild,
+  title: '👤 Member Joined',
+  color: 0x3498db,
+  fields: [
+    {
+      name: 'User',
+      value:
+        `${member.user.tag} ` +
+        `(${member.id})`,
+      inline: false
+    },
+    {
+      name: 'Account Created',
+      value:
+        `<t:${Math.floor(
+          member.user.createdTimestamp /
+          1000
+        )}:F>`,
+      inline: false
+    },
+    {
+      name: 'Young Account',
+      value:
+        young ? 'Yes' : 'No',
+      inline: true
+    },
+    {
+      name: 'Protected Name Match',
+      value:
+        suspiciousName
+          ? 'Yes'
+          : 'No',
+      inline: true
+    },
+    {
+      name: 'Action Taken',
+      value:
+        'Join logged. ' +
+        'No automatic name ban.',
+      inline: false
+    }
+  ]
+});
+
+if (suspiciousName) {
+  await checkMemberImpersonation(
+    member
+  );
+}
+```
+
+} catch (err) {
+console.error(
+'performJoinVetting error:',
+err.message
+);
+}
 }
 
 /* ----------------------------- EVENTS ----------------------------- */
 
-client.once('clientReady', async () => {
-  console.log(`Logged in as ${client.user.tag} at ${nowIso()}`);
+client.once(
+'clientReady',
+async () => {
+console.log(
+`Logged in as ${client.user.tag} ` +
+`at ${nowIso()}`
+);
 
-  console.log(
-    'Command registration IDs:',
-    JSON.stringify({
-      clientIdPresent: !!CLIENT_ID,
-      guildIdPresent: !!GUILD_ID,
-      clientIdLength: CLIENT_ID.length,
-      guildIdLength: GUILD_ID.length
-    })
+```
+console.log(
+  'Command registration IDs:',
+  JSON.stringify({
+    clientIdPresent:
+      Boolean(CLIENT_ID),
+    guildIdPresent:
+      Boolean(GUILD_ID),
+    clientIdLength:
+      CLIENT_ID.length,
+    guildIdLength:
+      GUILD_ID.length
+  })
+);
+
+try {
+  await registerCommands(
+    CLIENT_ID,
+    GUILD_ID,
+    BOT_TOKEN
   );
 
-  try {
-    await registerCommands(CLIENT_ID, GUILD_ID, BOT_TOKEN);
-    console.log('Slash commands registered');
-  } catch (err) {
-    console.error('registerCommands failed:', err.message);
-  }
-});
+  console.log(
+    'Slash commands registered'
+  );
+} catch (err) {
+  console.error(
+    'registerCommands failed:',
+    err.message
+  );
+}
+```
 
-client.on('guildMemberAdd', async (member) => {
-  await performJoinVetting(member);
-});
+}
+);
 
-client.on('guildMemberUpdate', async (_oldMember, newMember) => {
-  await checkMemberImpersonation(newMember);
-});
+client.on(
+'guildMemberAdd',
+async member => {
+await performJoinVetting(member);
+}
+);
 
-client.on('messageCreate', async (message) => {
-  await runMessageModeration(message);
-});
+client.on(
+'guildMemberUpdate',
+async (_oldMember, newMember) => {
+await checkMemberImpersonation(
+newMember
+);
+}
+);
 
-client.on('messageUpdate', async (_oldMessage, newMessage) => {
-  try {
-    if (newMessage.partial) {
-      await newMessage.fetch().catch(() => null);
-    }
+client.on(
+'messageCreate',
+async message => {
+await runMessageModeration(message);
+}
+);
 
-    await runMessageModeration(newMessage);
-  } catch (err) {
-    console.error('messageUpdate moderation error:', err.message);
-  }
-});
+client.on(
+'messageUpdate',
+async (_oldMessage, newMessage) => {
+try {
+if (newMessage.partial) {
+await newMessage.fetch()
+.catch(() => null);
+}
+
+```
+  await runMessageModeration(
+    newMessage
+  );
+} catch (err) {
+  console.error(
+    'messageUpdate moderation error:',
+    err.message
+  );
+}
+```
+
+}
+);
 
 /* ----------------------------- INTERACTIONS ----------------------------- */
 
-client.on('interactionCreate', async (interaction) => {
-  try {
-    if (!interaction.isChatInputCommand()) return;
+client.on(
+'interactionCreate',
+async interaction => {
+try {
+if (
+!interaction.isChatInputCommand()
+) {
+return;
+}
 
-    if (interaction.commandName === 'report') {
-      const reportedUser = interaction.options.getUser('user', true);
-      const reason = interaction.options.getString('reason', true);
-      const messageLink = interaction.options.getString('message_link') || null;
+```
+  if (
+    interaction.commandName ===
+    'report'
+  ) {
+    const reportedUser =
+      interaction.options.getUser(
+        'user',
+        true
+      );
 
-      const reportDoc = await Report.create({
-        guildId: interaction.guildId,
-        reporterId: interaction.user.id,
-        reporterTag: interaction.user.tag,
-        targetId: reportedUser.id,
-        targetTag: reportedUser.tag,
+    const reason =
+      interaction.options.getString(
+        'reason',
+        true
+      );
+
+    const messageLink =
+      interaction.options.getString(
+        'message_link'
+      ) || null;
+
+    const reportDoc =
+      await Report.create({
+        guildId:
+          interaction.guildId,
+        reporterId:
+          interaction.user.id,
+        reporterTag:
+          interaction.user.tag,
+        targetId:
+          reportedUser.id,
+        targetTag:
+          reportedUser.tag,
         reason,
         messageLink
       });
 
-      await sendReportEmbed({
-        guild: interaction.guild,
-        reportDoc
-      });
+    await sendReportEmbed({
+      guild:
+        interaction.guild,
+      reportDoc
+    });
 
-      await sendModLog({
-        guild: interaction.guild,
-        title: '📨 Report Submitted',
-        color: 0x9b59b6,
-        fields: [
-          {
-            name: 'Reporter',
-            value: `${interaction.user.tag} (${interaction.user.id})`,
-            inline: false
-          },
-          {
-            name: 'Reported User',
-            value: `${reportedUser.tag} (${reportedUser.id})`,
-            inline: false
-          },
-          {
-            name: 'Reason',
-            value: truncate(reason, 1024),
-            inline: false
-          }
-        ]
-      });
+    await sendModLog({
+      guild:
+        interaction.guild,
+      title:
+        '📨 Report Submitted',
+      color:
+        0x9b59b6,
+      fields: [
+        {
+          name: 'Reporter',
+          value:
+            `${interaction.user.tag} ` +
+            `(${interaction.user.id})`,
+          inline: false
+        },
+        {
+          name: 'Reported User',
+          value:
+            `${reportedUser.tag} ` +
+            `(${reportedUser.id})`,
+          inline: false
+        },
+        {
+          name: 'Reason',
+          value:
+            truncate(reason, 1024),
+          inline: false
+        }
+      ]
+    });
 
+    await interaction.reply({
+      content:
+        'Your report has been submitted ' +
+        'to the moderation team.',
+      flags: 64
+    });
+
+    return;
+  }
+
+  if (
+    interaction.commandName ===
+    'appeal'
+  ) {
+    const appealText =
+      interaction.options.getString(
+        'reason',
+        true
+      );
+
+    await Appeal.create({
+      guildId:
+        interaction.guildId,
+      userId:
+        interaction.user.id,
+      reason:
+        appealText,
+      createdAt:
+        new Date()
+    });
+
+    await sendModLog({
+      guild:
+        interaction.guild,
+      title:
+        '📝 Ban Appeal Submitted',
+      color:
+        0x2ecc71,
+      fields: [
+        {
+          name: 'User',
+          value:
+            `${interaction.user.tag} ` +
+            `(${interaction.user.id})`,
+          inline: false
+        },
+        {
+          name: 'Appeal',
+          value:
+            truncate(
+              appealText,
+              1024
+            ),
+          inline: false
+        }
+      ]
+    });
+
+    await interaction.reply({
+      content:
+        'Your appeal has been submitted ' +
+        'for review.',
+      flags: 64
+    });
+
+    return;
+  }
+
+  if (
+    interaction.commandName ===
+    'reports'
+  ) {
+    if (
+      !interaction.member ||
+      !isStaff(interaction.member)
+    ) {
       await interaction.reply({
-        content: 'Your report has been submitted to the moderation team.',
+        content:
+          'You do not have permission ' +
+          'to use this command.',
         flags: 64
       });
 
       return;
     }
 
-    if (interaction.commandName === 'appeal') {
-      const appealText = interaction.options.getString('reason', true);
-
-      await Appeal.create({
-        guildId: interaction.guildId,
-        userId: interaction.user.id,
-        reason: appealText,
-        createdAt: new Date()
-      });
-
-      await sendModLog({
-        guild: interaction.guild,
-        title: '📝 Ban Appeal Submitted',
-        color: 0x2ecc71,
-        fields: [
-          {
-            name: 'User',
-            value: `${interaction.user.tag} (${interaction.user.id})`,
-            inline: false
-          },
-          {
-            name: 'Appeal',
-            value: truncate(appealText, 1024),
-            inline: false
-          }
-        ]
-      });
-
-      await interaction.reply({
-        content: 'Your appeal has been submitted for review.',
-        flags: 64
-      });
-
-      return;
-    }
-
-    if (interaction.commandName === 'reports') {
-      if (!interaction.member || !isStaff(interaction.member)) {
-        await interaction.reply({
-          content: 'You do not have permission to use this command.',
-          flags: 64
-        });
-        return;
-      }
-
-      const reports = await Report.find({ guildId: interaction.guildId })
-        .sort({ createdAt: -1 })
+    const reports =
+      await Report.find({
+        guildId:
+          interaction.guildId
+      })
+        .sort({
+          createdAt: -1
+        })
         .limit(10);
 
-      if (!reports.length) {
-        await interaction.reply({
-          content: 'No reports found.',
-          flags: 64
-        });
-        return;
-      }
-
-      const content = reports
-        .map((r, i) => {
-          return `${i + 1}. ${r.targetTag} — ${truncate(r.reason, 120)} [${r.status || 'open'}]`;
-        })
-        .join('\n');
-
+    if (!reports.length) {
       await interaction.reply({
-        content: `📋 Recent Reports\n\n${content}`,
+        content:
+          'No reports found.',
         flags: 64
       });
 
       return;
     }
-  } catch (err) {
-    console.error('interactionCreate error:', err);
 
-    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: 'Something went wrong while processing that command.',
-        flags: 64
-      }).catch(() => null);
-    }
+    const content = reports
+      .map((report, index) => {
+        return [
+          `${index + 1}.`,
+          report.targetTag,
+          '—',
+          truncate(
+            report.reason,
+            120
+          ),
+          `[${report.status || 'open'}]`
+        ].join(' ');
+      })
+      .join('\n');
+
+    await interaction.reply({
+      content:
+        `📋 Recent Reports\n\n${content}`,
+      flags: 64
+    });
+
+    return;
   }
-});
+} catch (err) {
+  console.error(
+    'interactionCreate error:',
+    err
+  );
+
+  if (
+    interaction.isRepliable() &&
+    !interaction.replied &&
+    !interaction.deferred
+  ) {
+    await interaction.reply({
+      content:
+        'Something went wrong while ' +
+        'processing that command.',
+      flags: 64
+    }).catch(() => null);
+  }
+}
+```
+
+}
+);
 
 /* ----------------------------- OPTIONAL MOD LOGGING ----------------------------- */
 
-client.on('guildBanAdd', async (ban) => {
-  await sendModLog({
-    guild: ban.guild,
-    title: '🔨 Member Banned',
-    color: 0xe74c3c,
-    fields: [
-      {
-        name: 'User',
-        value: `${ban.user.tag} (${ban.user.id})`,
-        inline: false
-      }
-    ]
-  });
+client.on(
+'guildBanAdd',
+async ban => {
+await sendModLog({
+guild: ban.guild,
+title: '🔨 Member Banned',
+color: 0xe74c3c,
+fields: [
+{
+name: 'User',
+value:
+`${ban.user.tag} ` +
+`(${ban.user.id})`,
+inline: false
+}
+]
 });
+}
+);
 
-client.on('guildMemberRemove', async (member) => {
-  await sendModLog({
-    guild: member.guild,
-    title: '📤 Member Left',
-    color: 0x95a5a6,
-    fields: [
-      {
-        name: 'User',
-        value: `${member.user.tag} (${member.id})`,
-        inline: false
-      }
-    ]
-  });
+client.on(
+'guildMemberRemove',
+async member => {
+await sendModLog({
+guild: member.guild,
+title: '📤 Member Left',
+color: 0x95a5a6,
+fields: [
+{
+name: 'User',
+value:
+`${member.user.tag} ` +
+`(${member.id})`,
+inline: false
+}
+]
 });
+}
+);
 
 /* ----------------------------- LOGIN ----------------------------- */
 
-client.login(BOT_TOKEN).catch((err) => {
-  console.error('Discord login failed:', err.message);
+client.login(BOT_TOKEN)
+.catch(err => {
+console.error(
+'Discord login failed:',
+err.message
+);
 });
