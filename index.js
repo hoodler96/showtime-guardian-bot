@@ -249,27 +249,26 @@ function containsShortener(text = '') {
 
 function containsPromoLanguage(text = '') {
   const patterns = [
-    /not trying to sell/i,
-    /structured trade alerts/i,
-    /trade alerts/i,
-    /signals/i,
-    /vip/i,
-    /premium/i,
-    /join/i,
-    /helpful for me/i,
-    /check this out/i,
-    /server/i,
-    /discord/i,
-    /copy trades/i,
-    /analysis/i,
-    /alerts/i,
-    /mentor/i,
-    /profits/i
+    /dm me for signals/i,
+    /dm me for access/i,
+    /message me for signals/i,
+    /message me for access/i,
+    /join my server/i,
+    /join our server/i,
+    /join my discord/i,
+    /join our discord/i,
+    /buy my signals/i,
+    /paid signals/i,
+    /guaranteed returns/i,
+    /guaranteed profits/i,
+    /limited spots available/i,
+    /copy my trades/i,
+    /signal group/i,
+    /pump group/i,
+    /investment opportunity/i
   ];
 
-  return patterns.some(rx =>
-    rx.test(text)
-  );
+  return patterns.some(rx => rx.test(text));
 }
 
 function hasAttachments(message) {
