@@ -737,21 +737,24 @@ function evaluateMessageRisk(message) {
   let reason = null;
   let skipStrikes = false;
 
+  /*
+   * Discord invite links remain an immediate ban.
+   */
   if (hasInvite) {
     action = 'ban';
     reason =
       'Posted a Discord invite link';
     skipStrikes = true;
-  } else if (
-    !whitelisted &&
-    hasExternal &&
-    highRiskMember
-  ) {
-    action = 'ban';
-    reason =
-      'New/high-risk member posted external link';
-    skipStrikes = true;
-  } else if (
+  }
+
+  /*
+   * Normal external links are NOT automatically punished.
+   * They are sent to moderator review later.
+   *
+   * A link combined with obvious spam behavior can still
+   * trigger enforcement.
+   */
+  else if (
     !whitelisted &&
     hasExternal &&
     hasMassPing
@@ -760,7 +763,9 @@ function evaluateMessageRisk(message) {
     reason =
       'External link with @everyone/@here spam';
     skipStrikes = true;
-  } else if (
+  }
+
+  else if (
     !whitelisted &&
     hasExternal &&
     hasPromo
@@ -769,7 +774,9 @@ function evaluateMessageRisk(message) {
     reason =
       'Promotional external link spam';
     skipStrikes = true;
-  } else if (
+  }
+
+  else if (
     !whitelisted &&
     hasExternal &&
     repeatedBurst
@@ -778,12 +785,9 @@ function evaluateMessageRisk(message) {
     reason =
       'Repeated external link spam across channels';
     skipStrikes = true;
-  } else if (hasShortenedLink) {
-    action = 'ban';
-    reason =
-      'Shortened/redirect link spam';
-    skipStrikes = true;
-  } else if (
+  }
+
+  else if (
     hasMassPing &&
     (hasPromo || hasScamTerms)
   ) {
@@ -791,7 +795,13 @@ function evaluateMessageRisk(message) {
     reason =
       '@everyone/@here promotional spam';
     skipStrikes = true;
-  } else if (
+  }
+
+  /*
+   * Clearly scam-like language from a new/high-risk
+   * member can still trigger an immediate ban.
+   */
+  else if (
     hasScamTerms &&
     highRiskMember
   ) {
@@ -799,13 +809,18 @@ function evaluateMessageRisk(message) {
     reason =
       'New/high-risk member posted scam/advertising phrasing';
     skipStrikes = true;
-  } else if (
-    hasScamTerms ||
-    hasPromo
-  ) {
+  }
+
+  /*
+   * Established users get the normal strike/timeout
+   * flow for scam phrasing.
+   *
+   * Promotional wording alone does NOT trigger a timeout.
+   */
+  else if (hasScamTerms) {
     action = 'timeout';
     reason =
-      'Spam/scam advertising phrasing detected';
+      'Spam/scam phrasing detected';
   }
 
   return {
@@ -824,7 +839,8 @@ function evaluateMessageRisk(message) {
       newToServer,
       firstMessages,
       repeatedBurst,
-      highRiskMember
+      highRiskMember,
+      hasShortenedLink
     }
   };
 }
@@ -989,6 +1005,9 @@ async function runMessageModeration(message) {
     const whitelisted =
       riskResult.meta.whitelisted;
 
+    /*
+     * Ordinary external links are moderator-review only.
+     */
     if (
       hasExternal &&
       !whitelisted
@@ -1001,8 +1020,24 @@ async function runMessageModeration(message) {
 
     let externalRisk = null;
 
+    /*
+     * Do not send every normal Discord conversation
+     * through the AI risk classifier.
+     *
+     * Testimonials and ordinary discussion will never
+     * reach the classifier unless another risk signal exists.
+     */
+    const shouldUseAiRisk =
+      riskResult.meta.hasExternal ||
+      riskResult.meta.hasScamTerms ||
+      riskResult.meta.hasMassPing ||
+      containsShortener(
+        message.content || ''
+      );
+
     try {
       if (
+        shouldUseAiRisk &&
         typeof riskEngine?.analyzeMessage ===
         'function'
       ) {
@@ -1014,7 +1049,9 @@ async function runMessageModeration(message) {
             displayName:
               message.member?.displayName,
             accountAgeMs:
-              accountAgeMs(message.author)
+              accountAgeMs(
+                message.author
+              )
           });
       }
     } catch (err) {
