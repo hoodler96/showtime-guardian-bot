@@ -136,12 +136,50 @@ module.exports = async function registerCommands(clientId, guildId, botToken) {
               .setRequired(true)
           )
       )
+
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('bypass')
+          .setDescription('Exempt a trusted member from Bouncer moderation')
+          .addUserOption(option =>
+            option
+              .setName('user')
+              .setDescription('Member to exempt from moderation')
+              .setRequired(true)
+          )
+      )
+
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('unbypass')
+          .setDescription('Remove a member moderation bypass')
+          .addUserOption(option =>
+            option
+              .setName('user')
+              .setDescription('Member to return to normal moderation')
+              .setRequired(true)
+          )
+      )
+
+      .addSubcommand(subcommand =>
+        subcommand
+          .setName('bypass-status')
+          .setDescription('Check whether a member bypasses moderation')
+          .addUserOption(option =>
+            option
+              .setName('user')
+              .setDescription('Member to check')
+              .setRequired(true)
+          )
+      )
   ].map(command => command.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(cleanToken);
 
   await rest.put(
     Routes.applicationGuildCommands(cleanClientId, cleanGuildId),
-    { body: commands }
+    {
+      body: commands
+    }
   );
 };
