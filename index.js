@@ -1400,6 +1400,825 @@ client.on(
 /* ----------------------------- INTERACTIONS ----------------------------- */
 /* ----------------------------- INTERACTIONS ----------------------------- */
 
+client.on(
+  'interactionCreate',
+  async interaction => {
+    try {
+      if (
+        !interaction.isChatInputCommand()
+      ) {
+        return;
+      }
+
+      /* ---------------- BOUNCER STAFF COMMANDS ---------------- */
+
+      if (
+        interaction.commandName ===
+        'bouncer'
+      ) {
+        const actingMember =
+          await interaction.guild.members
+            .fetch(interaction.user.id)
+            .catch(() => interaction.member);
+
+        if (!isStaff(actingMember)) {
+          await interaction.reply({
+            content:
+              'You do not have permission to use Bouncer staff controls.',
+            flags: 64
+          });
+
+          return;
+        }
+
+        const subcommand =
+          interaction.options.getSubcommand();
+
+        /* ---------- STATUS ---------- */
+
+        if (subcommand === 'status') {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          const targetMember =
+            await interaction.guild.members
+              .fetch(targetUser.id)
+              .catch(() => null);
+
+          const strikeRecord =
+            await Strike.findOne({
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            });
+
+          const bypass =
+            await Bypass.exists({
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            });
+
+          const strikeCount =
+            strikeRecord?.count || 0;
+
+          const accountCreated =
+            `<t:${Math.floor(
+              targetUser.createdTimestamp /
+              1000
+            )}:F>`;
+
+          const serverJoined =
+            targetMember?.joinedTimestamp
+              ? `<t:${Math.floor(
+                  targetMember.joinedTimestamp /
+                  1000
+                )}:F>`
+              : 'Not currently in server';
+
+          const timedOut =
+            targetMember
+              ?.communicationDisabledUntilTimestamp >
+            Date.now()
+              ? `<t:${Math.floor(
+                  targetMember
+                    .communicationDisabledUntilTimestamp /
+                  1000
+                )}:R>`
+              : 'No';
+
+          const roles =
+            targetMember
+              ? targetMember.roles.cache
+                  .filter(
+                    role =>
+                      role.id !==
+                      interaction.guild.id
+                  )
+                  .map(role => role.name)
+                  .join(', ') ||
+                'None'
+              : 'N/A';
+
+          await interaction.reply({
+            content: [
+              `🛡️ **Bouncer Status — ${targetUser.tag}**`,
+              '',
+              `**Strikes:** ${strikeCount}`,
+              `**Moderation Bypass:** ${bypass ? 'Yes ✅' : 'No'}`,
+              `**Account Created:** ${accountCreated}`,
+              `**Joined Server:** ${serverJoined}`,
+              `**Timed Out:** ${timedOut}`,
+              `**Roles:** ${truncate(roles, 800)}`
+            ].join('\n'),
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- STRIKES ---------- */
+
+        if (subcommand === 'strikes') {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          const strikeRecord =
+            await Strike.findOne({
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            });
+
+          const strikeCount =
+            strikeRecord?.count || 0;
+
+          await interaction.reply({
+            content:
+              `⚠️ ${targetUser.tag} currently has **${strikeCount} strike(s)**.`,
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- REMOVE ONE STRIKE ---------- */
+
+        if (
+          subcommand ===
+          'remove-strike'
+        ) {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          const strikeRecord =
+            await Strike.findOne({
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            });
+
+          if (
+            !strikeRecord ||
+            strikeRecord.count <= 0
+          ) {
+            await interaction.reply({
+              content:
+                `${targetUser.tag} has no strikes to remove.`,
+              flags: 64
+            });
+
+            return;
+          }
+
+          strikeRecord.count -= 1;
+          strikeRecord.lastStrikeAt =
+            new Date();
+
+          await strikeRecord.save();
+
+          await sendModLog({
+            guild:
+              interaction.guild,
+            title:
+              '➖ Strike Removed',
+            color:
+              0x2ecc71,
+            fields: [
+              {
+                name: 'Member',
+                value:
+                  `${targetUser.tag} (${targetUser.id})`,
+                inline: false
+              },
+              {
+                name: 'Removed By',
+                value:
+                  `${interaction.user.tag} (${interaction.user.id})`,
+                inline: false
+              },
+              {
+                name: 'New Strike Count',
+                value:
+                  String(
+                    strikeRecord.count
+                  ),
+                inline: true
+              }
+            ]
+          });
+
+          await interaction.reply({
+            content:
+              `✅ Removed one strike from ${targetUser.tag}. They now have **${strikeRecord.count}**.`,
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- CLEAR STRIKES ---------- */
+
+        if (
+          subcommand ===
+          'clear-strikes'
+        ) {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          const strikeRecord =
+            await Strike.findOne({
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            });
+
+          if (strikeRecord) {
+            strikeRecord.count = 0;
+            strikeRecord.lastStrikeAt =
+              new Date();
+
+            await strikeRecord.save();
+          }
+
+          await sendModLog({
+            guild:
+              interaction.guild,
+            title:
+              '🧹 Strikes Cleared',
+            color:
+              0x2ecc71,
+            fields: [
+              {
+                name: 'Member',
+                value:
+                  `${targetUser.tag} (${targetUser.id})`,
+                inline: false
+              },
+              {
+                name: 'Cleared By',
+                value:
+                  `${interaction.user.tag} (${interaction.user.id})`,
+                inline: false
+              }
+            ]
+          });
+
+          await interaction.reply({
+            content:
+              `✅ All strikes cleared for ${targetUser.tag}.`,
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- UNTIMEOUT ---------- */
+
+        if (
+          subcommand ===
+          'untimeout'
+        ) {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          const targetMember =
+            await interaction.guild.members
+              .fetch(targetUser.id)
+              .catch(() => null);
+
+          if (!targetMember) {
+            await interaction.reply({
+              content:
+                'That member could not be found in the server.',
+              flags: 64
+            });
+
+            return;
+          }
+
+          await targetMember.timeout(
+            null,
+            `Manual timeout removal by ${interaction.user.tag}`
+          );
+
+          await sendModLog({
+            guild:
+              interaction.guild,
+            title:
+              '🔓 Timeout Removed',
+            color:
+              0x2ecc71,
+            fields: [
+              {
+                name: 'Member',
+                value:
+                  `${targetUser.tag} (${targetUser.id})`,
+                inline: false
+              },
+              {
+                name: 'Removed By',
+                value:
+                  `${interaction.user.tag} (${interaction.user.id})`,
+                inline: false
+              }
+            ]
+          });
+
+          await interaction.reply({
+            content:
+              `🔓 Timeout removed from ${targetUser.tag}.`,
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- UNBAN ---------- */
+
+        if (subcommand === 'unban') {
+          const userId =
+            interaction.options
+              .getString(
+                'user_id',
+                true
+              )
+              .trim();
+
+          if (!/^\d{17,20}$/.test(userId)) {
+            await interaction.reply({
+              content:
+                'That does not look like a valid Discord User ID.',
+              flags: 64
+            });
+
+            return;
+          }
+
+          try {
+            await interaction.guild.members
+              .unban(
+                userId,
+                `Manual unban by ${interaction.user.tag}`
+              );
+          } catch (err) {
+            await interaction.reply({
+              content:
+                `Could not unban that user: ${err.message}`,
+              flags: 64
+            });
+
+            return;
+          }
+
+          await sendModLog({
+            guild:
+              interaction.guild,
+            title:
+              '🔓 Member Unbanned',
+            color:
+              0x2ecc71,
+            fields: [
+              {
+                name: 'User ID',
+                value:
+                  userId,
+                inline: false
+              },
+              {
+                name: 'Unbanned By',
+                value:
+                  `${interaction.user.tag} (${interaction.user.id})`,
+                inline: false
+              }
+            ]
+          });
+
+          await interaction.reply({
+            content:
+              `🔓 User **${userId}** has been unbanned.`,
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- ADD BYPASS ---------- */
+
+        if (subcommand === 'bypass') {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          await Bypass.findOneAndUpdate(
+            {
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            },
+            {
+              $set: {
+                addedBy:
+                  interaction.user.id,
+                createdAt:
+                  new Date()
+              }
+            },
+            {
+              upsert: true,
+              new: true
+            }
+          );
+
+          await sendModLog({
+            guild:
+              interaction.guild,
+            title:
+              '🛡️ Moderation Bypass Added',
+            color:
+              0x2ecc71,
+            fields: [
+              {
+                name: 'Member',
+                value:
+                  `${targetUser.tag} (${targetUser.id})`,
+                inline: false
+              },
+              {
+                name: 'Added By',
+                value:
+                  `${interaction.user.tag} (${interaction.user.id})`,
+                inline: false
+              },
+              {
+                name: 'Effect',
+                value:
+                  'Normal Bouncer moderation and link review bypassed. Discord invite links remain prohibited.',
+                inline: false
+              }
+            ]
+          });
+
+          await interaction.reply({
+            content:
+              `🛡️ <@${targetUser.id}> now bypasses normal Bouncer moderation.\nDiscord server invite links are still prohibited.`,
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- REMOVE BYPASS ---------- */
+
+        if (
+          subcommand ===
+          'unbypass'
+        ) {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          const result =
+            await Bypass.deleteOne({
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            });
+
+          await sendModLog({
+            guild:
+              interaction.guild,
+            title:
+              '🔒 Moderation Bypass Removed',
+            color:
+              0xf1c40f,
+            fields: [
+              {
+                name: 'Member',
+                value:
+                  `${targetUser.tag} (${targetUser.id})`,
+                inline: false
+              },
+              {
+                name: 'Removed By',
+                value:
+                  `${interaction.user.tag} (${interaction.user.id})`,
+                inline: false
+              }
+            ]
+          });
+
+          await interaction.reply({
+            content:
+              result.deletedCount
+                ? `🔒 <@${targetUser.id}> is now subject to normal Bouncer moderation again.`
+                : `ℹ️ <@${targetUser.id}> did not currently have a moderation bypass.`,
+            flags: 64
+          });
+
+          return;
+        }
+
+        /* ---------- BYPASS STATUS ---------- */
+
+        if (
+          subcommand ===
+          'bypass-status'
+        ) {
+          const targetUser =
+            interaction.options.getUser(
+              'user',
+              true
+            );
+
+          const bypass =
+            await Bypass.findOne({
+              guildId:
+                interaction.guildId,
+              userId:
+                targetUser.id
+            });
+
+          if (!bypass) {
+            await interaction.reply({
+              content:
+                `🔒 <@${targetUser.id}> does **not** have a Bouncer moderation bypass.`,
+              flags: 64
+            });
+
+            return;
+          }
+
+          await interaction.reply({
+            content: [
+              `🛡️ <@${targetUser.id}> **has a Bouncer moderation bypass.**`,
+              `Added: <t:${Math.floor(
+                bypass.createdAt.getTime() /
+                1000
+              )}:F>`,
+              `Added by: <@${bypass.addedBy}>`
+            ].join('\n'),
+            flags: 64
+          });
+
+          return;
+        }
+
+        return;
+      }
+
+      /* ---------------- REPORT ---------------- */
+
+      if (
+        interaction.commandName ===
+        'report'
+      ) {
+        const reportedUser =
+          interaction.options.getUser(
+            'user',
+            true
+          );
+
+        const reason =
+          interaction.options.getString(
+            'reason',
+            true
+          );
+
+        const messageLink =
+          interaction.options.getString(
+            'message_link'
+          ) || null;
+
+        const reportDoc =
+          await Report.create({
+            guildId:
+              interaction.guildId,
+            reporterId:
+              interaction.user.id,
+            reporterTag:
+              interaction.user.tag,
+            targetId:
+              reportedUser.id,
+            targetTag:
+              reportedUser.tag,
+            reason,
+            messageLink
+          });
+
+        await sendReportEmbed({
+          guild:
+            interaction.guild,
+          reportDoc
+        });
+
+        await sendModLog({
+          guild:
+            interaction.guild,
+          title:
+            '📨 Report Submitted',
+          color:
+            0x9b59b6,
+          fields: [
+            {
+              name: 'Reporter',
+              value:
+                `${interaction.user.tag} (${interaction.user.id})`,
+              inline: false
+            },
+            {
+              name: 'Reported User',
+              value:
+                `${reportedUser.tag} (${reportedUser.id})`,
+              inline: false
+            },
+            {
+              name: 'Reason',
+              value:
+                truncate(
+                  reason,
+                  1024
+                ),
+              inline: false
+            }
+          ]
+        });
+
+        await interaction.reply({
+          content:
+            'Your report has been submitted to the moderation team.',
+          flags: 64
+        });
+
+        return;
+      }
+
+      /* ---------------- APPEAL ---------------- */
+
+      if (
+        interaction.commandName ===
+        'appeal'
+      ) {
+        const appealText =
+          interaction.options.getString(
+            'reason',
+            true
+          );
+
+        await Appeal.create({
+          guildId:
+            interaction.guildId,
+          userId:
+            interaction.user.id,
+          reason:
+            appealText,
+          createdAt:
+            new Date()
+        });
+
+        await sendModLog({
+          guild:
+            interaction.guild,
+          title:
+            '📝 Ban Appeal Submitted',
+          color:
+            0x2ecc71,
+          fields: [
+            {
+              name: 'User',
+              value:
+                `${interaction.user.tag} (${interaction.user.id})`,
+              inline: false
+            },
+            {
+              name: 'Appeal',
+              value:
+                truncate(
+                  appealText,
+                  1024
+                ),
+              inline: false
+            }
+          ]
+        });
+
+        await interaction.reply({
+          content:
+            'Your appeal has been submitted for review.',
+          flags: 64
+        });
+
+        return;
+      }
+
+      /* ---------------- REPORT LIST ---------------- */
+
+      if (
+        interaction.commandName ===
+        'reports'
+      ) {
+        const actingMember =
+          await interaction.guild.members
+            .fetch(interaction.user.id)
+            .catch(() => interaction.member);
+
+        if (!isStaff(actingMember)) {
+          await interaction.reply({
+            content:
+              'You do not have permission to use this command.',
+            flags: 64
+          });
+
+          return;
+        }
+
+        const reports =
+          await Report.find({
+            guildId:
+              interaction.guildId
+          })
+            .sort({
+              createdAt: -1
+            })
+            .limit(10);
+
+        if (!reports.length) {
+          await interaction.reply({
+            content:
+              'No reports found.',
+            flags: 64
+          });
+
+          return;
+        }
+
+        const content = reports
+          .map((report, index) => {
+            return (
+              `${index + 1}. ` +
+              `${report.targetTag} — ` +
+              `${truncate(report.reason, 120)} ` +
+              `[${report.status || 'open'}]`
+            );
+          })
+          .join('\n');
+
+        await interaction.reply({
+          content:
+            `📋 Recent Reports\n\n${content}`,
+          flags: 64
+        });
+
+        return;
+      }
+    } catch (err) {
+      console.error(
+        'interactionCreate error:',
+        err
+      );
+
+      if (
+        interaction.isRepliable() &&
+        !interaction.replied &&
+        !interaction.deferred
+      ) {
+        await interaction.reply({
+          content:
+            'Something went wrong while processing that command.',
+          flags: 64
+        }).catch(() => null);
+      }
+    }
+  }
+);
+/* ----------------------------- INTERACTIONS ----------------------------- */
+
 client.on('interactionCreate', async (interaction) => {
   try {
     if (!interaction.isChatInputCommand()) return;
