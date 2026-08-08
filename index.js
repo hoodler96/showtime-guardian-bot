@@ -628,6 +628,27 @@ async function shouldIgnoreAutomod(message) {
 
   return false;
 }
+async function hasManualBypass(message) {
+  if (!message?.guild || !message?.author) {
+    return false;
+  }
+
+  try {
+    const bypass = await Bypass.exists({
+      guildId: message.guild.id,
+      userId: message.author.id
+    });
+
+    return !!bypass;
+  } catch (err) {
+    console.error(
+      'Bypass lookup error:',
+      err.message
+    );
+
+    return false;
+  }
+}
 /* ----------------------------- LINK ALERTS ONLY ----------------------------- */
 
 async function sendLinkReviewAlert(
