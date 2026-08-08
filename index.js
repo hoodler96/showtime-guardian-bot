@@ -981,9 +981,9 @@ async function runMessageModeration(message) {
       return;
     }
 
-    if (shouldIgnoreAutomod(message)) {
-      return;
-    }
+   if (await shouldIgnoreAutomod(message)) {
+  return;
+}
 
     const currentCount =
       userMessageCounts.get(
