@@ -37,7 +37,7 @@ const MOD_LOG_CHANNEL_ID = String(process.env.MOD_LOG_CHANNEL_ID || '').trim();
 
 const PREMIUM_EXEMPT_ROLE_IDS = process.env.PREMIUM_EXEMPT_ROLE_IDS || '';
 const STAFF_ROLE_IDS = process.env.STAFF_ROLE_IDS || '';
-
+const Bypass = require('./models/Bypass');
 const PROTECTED_NAME_PATTERNS =
   process.env.PROTECTED_NAME_PATTERNS ||
   'showtime247,showtime trades,showtime,admin,moderator,mod,support';
