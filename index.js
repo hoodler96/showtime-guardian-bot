@@ -600,7 +600,7 @@ async function applyModerationAction(
   }
 }
 
-function shouldIgnoreAutomod(message) {
+async function shouldIgnoreAutomod(message) {
   if (!message?.guild || !message?.member) {
     return true;
   }
@@ -617,9 +617,17 @@ function shouldIgnoreAutomod(message) {
     return true;
   }
 
+  const bypassed = await Bypass.exists({
+    guildId: message.guild.id,
+    userId: message.author.id
+  });
+
+  if (bypassed) {
+    return true;
+  }
+
   return false;
 }
-
 /* ----------------------------- LINK ALERTS ONLY ----------------------------- */
 
 async function sendLinkReviewAlert(
